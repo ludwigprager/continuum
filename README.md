@@ -4,9 +4,11 @@ Git is the system of record: one YAML file per project, flat in `projects/`.
 Everything derived — snapshots, the report model, the five output formats — is
 rebuilt from those files and never hand-maintained.
 
-`HANDOFF.md` is the design document. This README is the operating manual.
+`SPEC.md` is the design document. This README is the operating manual.
 
-**Status: M1 (validation) and M2 (snapshot + model) complete.** M3–M6 are not built yet.
+**Status: M1 (validation), M2 (snapshot + model) and M3 (Excel) complete.**
+M4–M6 are not built yet: there are no charts, no PDF, no deck and no offline
+bundle.
 
 ## Requirements
 
@@ -21,7 +23,8 @@ Every tool runs in a container.
 ./check.sh --check-schema           # validate the schema and reference files
 ./check.sh                          # validate projects/ - see below
 ./snapshot.sh                       # projects/ -> out/tables/*.jsonl
-./report.sh                         # snapshot + model -> out/reports/<date>/
+./report.sh                         # snapshot + model + Excel -> out/reports/<date>/
+./report.sh --lang en               # same, English labels
 ./shell.sh                          # interactive shell in the pipeline image
 ```
 
@@ -55,7 +58,7 @@ commit, keep a warm container and set `USE_WARM_CONTAINER=1`:
 
 ```bash
 podman run -d --name mig-dev --network=none -v "$PWD:/work:z" \
-    -w /work mig-pipeline:0.1.0 sleep infinity
+    -w /work "mig-pipeline:$(cat VERSION)" sleep infinity
 ```
 
 ## The pipeline
@@ -65,13 +68,14 @@ projects/**/*.yaml
       |  snapshot.py        five tables, one row per (project, child)
       v
 out/tables/*.jsonl  ->  DuckDB  ->  out/reports/<date>/report_model.json
-                                       |  renderers (M3-M5)  lay out; never compute
+                                       |  renderers lay out; they never compute
                                        v
-                       report.xlsx  report.pdf  deck.pptx  *.png  report.txt
+                       report.xlsx      <- M3, built
+                       *.png  report.txt  report.pdf  deck.pptx   <- M4-M5
 ```
 
 `report_model.json` is the only thing renderers read. If a renderer needs a
-number that is not in the model, the number goes in the model (HANDOFF 11).
+number that is not in the model, the number goes in the model (SPEC 11).
 
 ### Reproducibility
 
@@ -106,6 +110,54 @@ advantage here, a queryable time series, is not wanted. The trade is that a
 jsonl file does not carry its own schema, so the column types are declared in
 `snapshot.py` and shared with `build_model.py` via `table_schemas()`.
 
+### The Excel report
+
+`out/reports/<date>/report.xlsx` is the output that actually gets used, because
+managers slice it themselves.
+
+| sheet | what it is |
+|---|---|
+| `dashboard` | headline numbers, raw and verified coverage, provenance, the chart PNGs |
+| `counts` | every frequency table stacked vertically — no pivot skills needed, and what people paste into emails |
+| `projects` | one row per project, plus convenience columns (`datastore_engines`, `sites`, `os_families`, `has_db2`, `open_blockers`) |
+| `datastores` `environments` `blockers` `dependencies` | the other grains, one row per child |
+| `definitions` | the counting rule behind every number, one line each |
+| `pivot_site_os` | a pre-built pivot, refreshed by Excel when the file opens |
+
+Each grain sheet is a real Excel table (`tbl_projects`, `tbl_environments`, …)
+with a filter and a frozen header, so a pivot can be built straight off it.
+Every coded field is **two columns**: `security_class_code` holds `S3` and
+`security_class_label` holds the label. Pivot on the code — it sorts in the
+taxonomy's order — and display the label.
+
+Formatting is deliberately thin. Heavy formatting fights pivot tables.
+
+#### The template, and why it is a committed binary
+
+openpyxl cannot create a pivot table. `templates/workbook.xlsx` holds the
+pre-built pivots; `xlsx.py` loads it and writes the data into it. Build the
+workbook from scratch instead and the pivots are gone — silently, which is why
+a missing template is a loud warning and `tests/test_xlsx.py` fails without one.
+
+Which pivots exist is a report decision, so it lives in `reports/daily.yaml`
+under `pivots:`. After changing that, or after a schema change that moves the
+columns a pivot reads (`xlsx.py` warns when it has), rebuild the template:
+
+```bash
+./shell.sh python3 tools/make_workbook_template.py \
+    --model out/reports/<date>/report_model.json
+```
+
+The template is generated rather than hand-made in Excel so that it stays in
+git, diffs, and can be rebuilt by someone who has no copy of Excel. It is
+built with an empty pivot cache marked *refresh on load*: Excel fills it in
+from the sheet when the file is opened, so the pivot follows however many rows
+arrived today.
+
+The workbook is byte-identical for identical input, like the model. That takes
+pinning both the zip entry timestamps and `docProps/core.xml`, which openpyxl
+stamps with the wall clock as it saves.
+
 ### Counting rules
 
 "How many projects have DB2" has at least three defensible answers, so every
@@ -130,7 +182,7 @@ the model says which is which, in `counts`.
 ### How `unknown` is counted
 
 `unknown` is an explicit row in every distribution and is never dropped
-(HANDOFF 11). Two rules make that true:
+(SPEC 11). Two rules make that true:
 
 1. A missing or null coded value is flattened to the string `unknown` — not
    NULL, not absent. Numbers stay NULL, because `0` is a real answer.
@@ -212,7 +264,7 @@ SQL; identifiers are quoted so it fails loudly rather than silently.
 ### Optional and mandatory
 
 **Every field is optional by default.** Only `id` and `schema_version` are
-required. That is deliberate (HANDOFF 2): a team that cannot submit a
+required. That is deliberate (SPEC 2): a team that cannot submit a
 half-filled file will keep its data in a private spreadsheet, and you will
 never see it.
 
@@ -297,12 +349,12 @@ shapes, unquoted-version traps). `tests/fixtures/invalid/` holds one directory
 per failure mode, each with an `expect.txt` naming the finding codes that must
 be reported. **Adding a failure case is a new directory, not a Python change.**
 
-## Deviations from HANDOFF.md
+## Deviations from SPEC.md
 
 Recorded so they read as decisions rather than drift.
 
 Bash entry points instead of a Makefile, podman-first, and compose off the
-daily path were deviations at first; HANDOFF.md §6.5 and §8.3 have since been
+daily path were deviations at first; SPEC.md §6.5 and §8.3 have since been
 updated to specify them, so they are no longer deviations. What remains:
 
 - **A warm container is allowed for the pre-commit hook.** §8.3 says one-shot
@@ -317,6 +369,17 @@ updated to specify them, so they are no longer deviations. What remains:
   actually needed are few, so each rule declares its grain and what it counts
   and `build_model.py` composes the SQL. The prose `text_de` / `text_en` are
   unchanged and still printed next to the numbers.
+- **`docker-compose.yml` has no `report` service.** §8.3 lists one. The order
+  of the pipeline lives in `./report.sh`, which also passes the git provenance
+  in; a compose service would be a second copy of that order in a file nothing
+  tests. `serve` and `scheduler` are genuinely long-lived and will be added
+  when they are needed.
+- **`templates/workbook.xlsx` is generated, not hand-built.** §6.4 assumes a
+  template someone made in Excel. `tools/make_workbook_template.py` builds it
+  from `reports/daily.yaml`, which keeps it in git and rebuildable without
+  Excel. The pivot XML it writes was verified by opening the result in a
+  spreadsheet application and checking the refreshed numbers against the
+  `counts` sheet; it has not been opened in Microsoft Excel itself.
 - **Dates are normalised before structural validation.** A bare YAML date
   (`2026-09-14`) resolves to a date object and would fail `type: string`.
   Versions get no such treatment: an unquoted `7.9` must fail loudly, because
@@ -324,7 +387,7 @@ updated to specify them, so they are no longer deviations. What remains:
 
 ## Open questions blocking later milestones
 
-From HANDOFF §12, still unanswered:
+From SPEC §12, still unanswered:
 
 1. **Taxonomy labels** (blocks M5). `CA-1..3`, `CB-1..4`, `S1..S4` and the tier
    codes have no labels; `taxonomy.yaml` carries `null` rather than invented
@@ -335,5 +398,6 @@ From HANDOFF §12, still unanswered:
 3. **Corporate `.potx`** (blocks M5).
 4. **Report scoping** — one deck, or one per team (changes whether
    `build_model.py` runs once or per team).
-5. **`placement` shape** (§12.4) — decide before the site × OS cross-tab in M2.
-6. **Snapshot retention** — affects whether the Parquet layer needs partitioning.
+5. **`placement` shape** (§12.4) — no longer blocking: both shapes normalise
+   into environment rows, and the site × OS cross-tab counts environments.
+6. ~~**Snapshot retention**~~ — answered: nothing is kept between runs.

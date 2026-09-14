@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-commit hook. Validates only what is staged, through the same code path
-# as check.sh and CI (HANDOFF 6.1: one code path, three call sites).
+# as check.sh and CI (SPEC 6.1: one code path, three call sites).
 #
 # Install:  ln -sf ../../scripts/precommit.sh .git/hooks/pre-commit
 # Skip once: git commit --no-verify

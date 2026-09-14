@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-snapshot.py - the derived analytical layer. HANDOFF 6.2.
+snapshot.py - the derived analytical layer. SPEC 6.2.
 
     projects/**/*.yaml  ->  out/tables/*.jsonl  (read directly by DuckDB)
 
@@ -9,7 +9,7 @@ Why jsonl: DuckDB cannot read YAML, and this keeps pandas out of the image.
 There is no Parquet, no dated snapshot history and nothing carried over from
 the last run. The tables are a pure function of the working tree: delete
 out/ and the next run rebuilds it identically. Git is the history.
-See HANDOFF 2.
+See SPEC 2.
 
 Five tables, each one row per (project, child) pair. That is what makes
 "how many projects have DB2" a COUNT(DISTINCT project_id) rather than a row
@@ -95,6 +95,41 @@ SCHEMAS: dict[str, dict[str, str]] = {
     },
 }
 
+# Which field of the project schema each child-table column was flattened from.
+#
+# flatten() below already had to name these paths to read the values. Naming
+# them once more here, instead of a second time in a renderer, is what lets
+# build_model.py ask the schema whether a column is coded and which taxonomy
+# group it belongs to. No taxonomy name and no enum value appears in any of
+# this - only the path, which the flattening already knew (SPEC 6.1.1).
+#
+# A column with no entry is a fact about the row rather than a field of the
+# project (project_id, idx, is_placeholder) and is never labelled.
+SOURCES: dict[str, dict[str, str]] = {
+    "datastores": {
+        "engine": "datastores[].engine",
+        "version": "datastores[].version",
+        "role": "datastores[].role",
+    },
+    "environments": {
+        "name": "placement.environments[].name",
+        "datacenter": "placement.environments[].datacenter",
+        "os_family": "placement.environments[].os.family",
+        "os_version": "placement.environments[].os.version",
+        "os_eol": "placement.environments[].os.eol",
+    },
+    "blockers": {
+        "blocker_id": "migration.blockers[].id",
+        "type": "migration.blockers[].type",
+        "severity": "migration.blockers[].severity",
+        "status": "migration.blockers[].status",
+    },
+    "dependencies": {
+        "from_project": "id",
+        "to_project": "integration.depends_on[]",
+    },
+}
+
 
 # Columns of the projects table that are not fields of a project: they are
 # facts about the file or about the validation run.
@@ -153,6 +188,37 @@ def table_schemas(schema: "Schema") -> dict[str, dict[str, str]]:
     projects.update({name: typ for name, typ, _, _ in project_columns(schema)})
     schemas["projects"] = projects
     return schemas
+
+
+def column_specs(schema: "Schema") -> dict[str, list[dict]]:
+    """Every column of every table, with the schema annotations behind it.
+
+    The tables carry codes; the report has to show labels. Which taxonomy
+    group a column's codes come from is a property of the schema, so it is
+    read from the schema here and handed to build_model.py, which bakes the
+    labels into the model once. Nothing downstream ever sees a taxonomy name
+    (SPEC 5.2, 6.1.1).
+    """
+    annotated = {pattern: annots for pattern, annots in schema.walk_schema()}
+    project_paths = {name: pattern for name, _, pattern, _ in project_columns(schema)}
+
+    specs: dict[str, list[dict]] = {}
+    for table, columns in table_schemas(schema).items():
+        sources = dict(SOURCES.get(table) or {})
+        if table == "projects":
+            sources.update(project_paths)
+        specs[table] = []
+        for name, typ in columns.items():
+            annots = annotated.get(sources.get(name, ""), {})
+            specs[table].append({
+                "key": name,
+                "type": typ,
+                "kind": annots.get("x-kind"),
+                "taxonomy": annots.get("x-taxonomy"),
+                "reference": annots.get("x-ref"),
+                "source": sources.get(name),
+            })
+    return specs
 
 
 def project_row(doc: dict, columns: list[tuple[str, str, str, str]]) -> dict:
@@ -287,7 +353,7 @@ def flatten(doc: dict, source_file: str, coverage: tuple[int, int],
                 "role": code(entry.get("role")),
                 "is_placeholder": False})
 
-    # HANDOFF 12.4 is open: placement may be a single `datacenter` scalar
+    # SPEC 12.4 is open: placement may be a single `datacenter` scalar
     # (v1 imported data) or an `environments` list (target schema). Both
     # normalise to environment rows here so every downstream count is written
     # once. A flat scalar becomes one environment with no name, because the
@@ -353,7 +419,7 @@ def write_jsonl(rows: list[dict], path: Path) -> None:
 
 
 def connect() -> duckdb.DuckDBPyConnection:
-    """DuckDB with every path to the network closed (HANDOFF 8.2).
+    """DuckDB with every path to the network closed (SPEC 8.2).
 
     `json` is statically linked into the Python wheel. The optional extensions
     (httpfs, excel, spatial) download on first use, so autoinstall and autoload

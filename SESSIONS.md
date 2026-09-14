@@ -1,6 +1,6 @@
 # Running the Claude Code sessions
 
-`HANDOFF.md` is the spec. This is the operating manual for the human driving
+`SPEC.md` is the spec. This is the operating manual for the human driving
 the build.
 
 **This file is for you, not for the agent.** It is deliberately not named
@@ -22,7 +22,7 @@ mkdir -p tools templates schema reports tests/fixtures docker
 cp ~/Downloads/import_xlsx.py tools/
 cp ~/Downloads/make_testdata.py tools/
 cp ~/Downloads/README.md tools/README-import.md
-cp ~/Downloads/HANDOFF.md .
+cp ~/Downloads/SPEC.md .
 
 git add -A && git commit -m "importer + handoff"
 ```
@@ -32,7 +32,7 @@ The commit matters. Claude Code makes large multi-file changes and you want
 
 ### CLAUDE.md is the piece that makes it stick
 
-`HANDOFF.md` is just a file. Claude Code won't read it unless told, and it
+`SPEC.md` is just a file. Claude Code won't read it unless told, and it
 won't survive a `/clear`. `CLAUDE.md` is loaded into every session
 automatically, so the pointer goes there:
 
@@ -40,7 +40,7 @@ automatically, so the pointer goes there:
 cat > CLAUDE.md <<'EOF'
 # Project: legacy-to-cloud-native catalogue & reporting
 
-@HANDOFF.md is the spec for this repo. Read it before any task.
+@SPEC.md is the spec for this repo. Read it before any task.
 The Contracts (§5), Do not (§11) and Gotchas (§9) sections are binding.
 
 Working agreement:
@@ -57,7 +57,7 @@ EOF
 git add CLAUDE.md && git commit -m "CLAUDE.md"
 ```
 
-The `@HANDOFF.md` syntax imports the file, so its content is in context every
+The `@SPEC.md` syntax imports the file, so its content is in context every
 session without pasting it.
 
 ### Permissions
@@ -82,7 +82,7 @@ container run. Podman is the default engine, docker the fallback:
 ```
 
 There is no Makefile — the entry points are the `*.sh` scripts at the repo
-root (HANDOFF §6.5).
+root (SPEC §6.5).
 
 ### Real data to build against
 
@@ -121,7 +121,7 @@ claude
 Then:
 
 ```text
-Read HANDOFF.md. Don't write any code yet. Tell me: what's ambiguous or
+Read SPEC.md. Don't write any code yet. Tell me: what's ambiguous or
 underspecified, what you'd need to decide that isn't written down, and
 anything in the spec you think is wrong. Then propose a concrete plan for M1
 only.
@@ -136,9 +136,9 @@ Fresh context each time (`/clear` between) — a session that has already built
 three milestones pattern-matches instead of reading the spec.
 
 ```text
-Implement M<N> from HANDOFF.md.
+Implement M<N> from SPEC.md.
 
-Read HANDOFF.md first — §5 (contracts), §9 (gotchas) and §11 (do not) are
+Read SPEC.md first — §5 (contracts), §9 (gotchas) and §11 (do not) are
 binding, and §6.1.1 means no field names, codes or enum values in code:
 everything comes from schema/project.schema.yaml annotations.
 
@@ -197,15 +197,15 @@ is still ahead, in M4.
 |---|---|
 | M1 validation | done |
 | M2 tables + model | done |
-| M3 Excel | next |
-| M4 TXT + PNG | |
+| M3 Excel | done |
+| M4 TXT + PNG | next |
 | M5 PDF + PPTX | |
 | M6 offline bundle | `--network=none` already enforced by `./verify.sh` |
 
 `import.sh` and `docker/Dockerfile.import` are done too, though they are not a
 milestone of their own.
 
-Open questions that block later work are in HANDOFF §12. The live one is
+Open questions that block later work are in SPEC §12. The live one is
 **§12.1**: the taxonomy codes have no labels, `taxonomy.yaml` carries
 `label_de: null` rather than invented words, and `./check.sh --check-schema`
 warns about every one until they are filled in. That blocks M5.

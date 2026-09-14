@@ -1,6 +1,6 @@
-# Pinned exactly: reproducibility is a requirement (HANDOFF 9).
-# The renderer stack (matplotlib, python-pptx, jinja2, openpyxl) arrives with
-# M3-M5, not before.
+# Pinned exactly: reproducibility is a requirement (SPEC 9).
+# The rest of the renderer stack (matplotlib, python-pptx, jinja2) arrives
+# with M4-M5, not before.
 #
 # duckdb: `json` and `parquet` are statically linked into the Python wheel and
 # need no download. The optional extensions (httpfs, excel, spatial) DO reach
@@ -10,3 +10,9 @@ ruamel.yaml==0.19.1
 jsonschema==4.26.0
 duckdb==1.5.5
 pytest==8.4.2
+
+# M3 (Excel). openpyxl is the only way to write xlsx here; LibreOffice is not
+# an option (SPEC 11). Pillow is openpyxl's hard dependency for embedding the
+# chart PNGs on the dashboard sheet - without it ws.add_image raises.
+openpyxl==3.1.5
+pillow==11.3.0

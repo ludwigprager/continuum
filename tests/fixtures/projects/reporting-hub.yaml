@@ -1,5 +1,5 @@
 # The v1 imported shape: a single `datacenter` scalar rather than an
-# `environments` list. Both are accepted while HANDOFF 12.4 is open.
+# `environments` list. Both are accepted while SPEC 12.4 is open.
 schema_version: 1
 id: reporting-hub
 my_mandatory_field: TODO

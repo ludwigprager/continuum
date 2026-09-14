@@ -47,7 +47,7 @@ $id: https://example.invalid/mig/project.schema.json
 title: Project record
 description: >-
   One project. Everything except id and schema_version may be missing;
-  missing means unknown, never zero (HANDOFF 5.1).
+  missing means unknown, never zero (SPEC 5.1).
 
 type: object
 required: [schema_version, id, my_mandatory_field]
@@ -85,7 +85,7 @@ properties:
   #
   # Think before adding one. Every existing project file must be edited before
   # validation passes again, and a team that cannot fill it in has no way to
-  # submit anything at all - which is how data stops reaching you (HANDOFF 2).
+  # submit anything at all - which is how data stops reaching you (SPEC 2).
   # Note also that `required:` at the ROOT is the only unconditional kind:
   # inside a block it only applies when that block is present.
   my_mandatory_field:
@@ -121,7 +121,7 @@ properties:
     additionalProperties: false
     description: >-
       Both shapes are accepted: a single `datacenter` scalar (v1 imported data)
-      and an `environments` list (target schema). HANDOFF 12.4 is still open;
+      and an `environments` list (target schema). SPEC 12.4 is still open;
       snapshot.py normalises both into environment rows.
     properties:
       datacenter:
@@ -214,7 +214,7 @@ properties:
     type: [object, "null"]
     description: >-
       Columns the importer could not map. Arbitrary content, exempt from all
-      structural rules (HANDOFF 3).
+      structural rules (SPEC 3).
 
   _meta:
     type: object
@@ -231,7 +231,7 @@ properties:
 
 # -------------------------------------------------------------------------
 # $defs - the building blocks. Pick one with $ref instead of writing types by
-# hand: each of these solves a YAML trap from HANDOFF 9 once, for everybody.
+# hand: each of these solves a YAML trap from SPEC 9 once, for everybody.
 # -------------------------------------------------------------------------
 $defs:
 
@@ -251,7 +251,7 @@ $defs:
     pattern: '^([0-9][0-9A-Za-z.+_~-]*|unknown)$'
     description: >-
       Always a quoted string. Unquoted 7.9 is a float and eventually prints as
-      7.9000000000000004; unquoted 2016 is an integer (HANDOFF 9).
+      7.9000000000000004; unquoted 2016 is an integer (SPEC 9).
     x-kind: version
 
   date:
@@ -268,5 +268,5 @@ $defs:
       - {const: unknown}
       - {type: "null"}
     description: >-
-      A non-negative count, or "unknown". Never 0 for missing (HANDOFF 5.1).
+      A non-negative count, or "unknown". Never 0 for missing (SPEC 5.1).
     x-kind: count

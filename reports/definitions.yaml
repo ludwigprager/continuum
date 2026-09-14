@@ -1,4 +1,4 @@
-# Counting rules. HANDOFF 7.
+# Counting rules. SPEC 7.
 #
 # "How many projects have DB2" has at least three defensible answers. Every
 # rule lives here, is applied in exactly one place in build_model.py, is named
@@ -16,7 +16,7 @@
 # How `unknown` is counted
 # --------------------------------------------------------------------------
 # `unknown` is an explicit row in every distribution and is never dropped
-# (HANDOFF 11). Two things make that true:
+# (SPEC 11). Two things make that true:
 #
 #   1. A missing or null coded value is written as the string `unknown` when
 #      the snapshot is flattened. It is not NULL and it does not vanish.

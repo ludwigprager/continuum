@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Everything that must pass before a commit is worth pushing.
 # Runs with --network=none, which is the cheapest regression test for the
-# air-gap traps in HANDOFF 8.2.
+# air-gap traps in SPEC 8.2.
 set -euo pipefail
 # shellcheck source=scripts/lib.sh
 source "$(dirname "$0")/scripts/lib.sh"
@@ -19,19 +19,26 @@ step "pytest"
 run_in_container -- python3 -m pytest tests -q -p no:cacheprovider || fail=1
 
 step "full pipeline against fixtures, --network=none"
-# HANDOFF 8.2: the cheapest regression test for the air-gap traps is running
+# SPEC 8.2: the cheapest regression test for the air-gap traps is running
 # the whole thing with no network at all. This is that job, run locally.
 PIN="2026-09-14T04:00:00+02:00"
+REPORT_DIR="$REPO_ROOT/out/reports/fixtures"
+# Every artifact the pipeline produces, hashed before and after a second run.
+ARTIFACTS=(report_model.json report.xlsx)
 if "$REPO_ROOT/report.sh" --projects tests/fixtures/projects --date fixtures \
         --generated-at "$PIN" >/dev/null 2>&1; then
-    a=$(sha256sum "$REPO_ROOT/out/reports/fixtures/report_model.json" | cut -d' ' -f1)
+    before=$(sha256sum "${ARTIFACTS[@]/#/$REPORT_DIR/}")
     "$REPO_ROOT/report.sh" --projects tests/fixtures/projects --date fixtures \
         --generated-at "$PIN" >/dev/null 2>&1
-    b=$(sha256sum "$REPO_ROOT/out/reports/fixtures/report_model.json" | cut -d' ' -f1)
-    if [ "$a" = "$b" ]; then
-        printf '  ok   report_model.json byte-identical across runs (%s)\n' "${a:0:16}"
+    after=$(sha256sum "${ARTIFACTS[@]/#/$REPORT_DIR/}")
+    if [ "$before" = "$after" ]; then
+        for artifact in "${ARTIFACTS[@]}"; do
+            printf '  ok   %-18s byte-identical across runs\n' "$artifact"
+        done
     else
-        printf '  FAIL report_model.json differs between runs\n'; fail=1
+        printf '  FAIL an artifact differs between runs\n%s\n%s\n' \
+            "$before" "$after"
+        fail=1
     fi
 else
     printf '  FAIL pipeline did not complete\n'; fail=1

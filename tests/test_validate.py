@@ -95,7 +95,7 @@ def test_invalid_fixture_fails_with_expected_findings(case):
 
 @pytest.mark.parametrize("case", invalid_cases())
 def test_every_error_names_a_file_and_a_line(case):
-    """file:line:fix is the contract (HANDOFF 6.1), not a nicety."""
+    """file:line:fix is the contract (SPEC 6.1), not a nicety."""
     _, payload = run_json("--projects", str(INVALID_ROOT / case), "--schema", str(SCHEMA))
     for finding in payload["findings"]:
         if finding["level"] != "error":
@@ -106,7 +106,7 @@ def test_every_error_names_a_file_and_a_line(case):
 
 
 def test_error_message_format_matches_the_spec():
-    """The exact shape from HANDOFF 6.1, not jsonschema's default wording."""
+    """The exact shape from SPEC 6.1, not jsonschema's default wording."""
     proc = run("--projects", str(INVALID_ROOT / "unknown-enum"), "--schema", str(SCHEMA))
     out = proc.stdout
     assert "unknown-enum/project.yaml:10:21" in out
@@ -122,7 +122,7 @@ def test_cycle_is_reported_with_the_ring_not_just_its_existence():
 
 
 # --------------------------------------------------------------------------
-# Exit-code contract (HANDOFF 5.3)
+# Exit-code contract (SPEC 5.3)
 # --------------------------------------------------------------------------
 
 def test_missing_projects_dir_is_a_tool_error_not_a_data_error():
@@ -145,7 +145,7 @@ def test_warnings_alone_do_not_fail_but_do_under_strict():
 # --------------------------------------------------------------------------
 
 def test_underscore_files_are_skipped():
-    """_import_manifest.yaml is provenance, not a project (HANDOFF 3)."""
+    """_import_manifest.yaml is provenance, not a project (SPEC 3)."""
     _, payload = run_json("--projects", str(VALID), "--schema", str(SCHEMA))
     files = {p["file"] for p in payload["coverage"]["by_project"]}
     assert not any("_import_manifest" in f for f in files)
@@ -195,7 +195,7 @@ def test_unknown_and_null_and_missing_all_count_as_not_answered(tmp_path):
 
 
 def test_raw_and_verified_coverage_are_separate_numbers():
-    """HANDOFF 11: imported data is not verified data."""
+    """SPEC 11: imported data is not verified data."""
     _, payload = run_json("--projects", str(VALID), "--schema", str(SCHEMA))
     coverage = payload["coverage"]
     assert coverage["field_coverage_pct"] > coverage["verified_coverage_pct"]
@@ -203,7 +203,7 @@ def test_raw_and_verified_coverage_are_separate_numbers():
 
 
 def test_both_placement_shapes_validate():
-    """HANDOFF 12.4 is open; neither shape may fail while it is."""
+    """SPEC 12.4 is open; neither shape may fail while it is."""
     _, payload = run_json("--projects", str(VALID), "--schema", str(SCHEMA))
     assert payload["summary"]["errors"] == 0
     ids = {p["id"] for p in payload["coverage"]["by_project"]}

@@ -1,11 +1,12 @@
-# HANDOFF: legacy-to-cloud-native project catalogue & reporting pipeline
+# SPEC: legacy-to-cloud-native project catalogue & reporting pipeline
 
 You are picking up a project mid-build.
 
-**Done: M1 (validation) and M2 (tables + report model).** `./check.sh` and
-`./report.sh` work end to end against `projects/` with no network access,
-under podman or docker. What remains is the five renderers (M3-M5), the
-import entry point, and the offline bundle (M6). See 10 for the state of each.
+**Done: M1 (validation), M2 (tables + report model) and M3 (Excel).**
+`./check.sh` and `./report.sh` work end to end against `projects/` with no
+network access, under podman or docker, and produce `report.xlsx`. What
+remains is four of the five renderers (M4-M5) and the offline bundle (M6).
+See 10 for the state of each.
 
 Read this whole document before writing code. The **Contracts** and **Do not**
 sections are the parts that will cost the most to get wrong.
@@ -103,6 +104,7 @@ python import_xlsx.py derive-schema  projekte.xlsx --config import/ --out schema
 │   ├── validate.py              # BUILD
 │   ├── snapshot.py              # BUILD - YAML -> jsonl tables
 │   ├── build_model.py           # BUILD - DuckDB -> report_model.json
+│   ├── make_workbook_template.py # BUILD - the pre-built pivots, run rarely
 │   └── render/
 │       ├── charts.py            # BUILD - PNG, run first, others embed its output
 │       ├── xlsx.py              # BUILD
@@ -636,9 +638,15 @@ dependency cycle and one with an unknown enum code.
 identical input produces byte-identical output. Asserted in a test, and in
 `./verify.sh` on every run.
 
-**M3 — Excel first.** It is the output that gets used.
+**M3 — Excel first. DONE.** It is the output that gets used.
 Acceptance: open it, build a pivot of site × OS family from the `environments`
 sheet without touching the data, and have the numbers match the `counts` sheet.
+`./report.sh` writes `out/reports/<date>/report.xlsx`, and the workbook is
+byte-identical for identical input, as the model is. The pre-built pivots live
+in `templates/workbook.xlsx`, which `tools/make_workbook_template.py`
+generates from the `pivots:` section of `reports/daily.yaml` - openpyxl cannot
+create a pivot table, and a hand-made template could not be rebuilt after a
+schema change by anyone without Excel.
 
 **M4 — TXT and PNG.** Cheap, and they make the model easy to eyeball.
 

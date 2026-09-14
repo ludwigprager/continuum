@@ -1,4 +1,4 @@
-# Version strings that are traps when unquoted (HANDOFF 9):
+# Version strings that are traps when unquoted (SPEC 9):
 #   7.9   -> float, prints as 7.9000000000000004
 #   2016  -> integer
 #   15    -> integer

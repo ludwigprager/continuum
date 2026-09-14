@@ -1,4 +1,4 @@
-# One-shot jobs, not daemons (HANDOFF 8.3).
+# One-shot jobs, not daemons (SPEC 8.3).
 #
 # The daily pipeline does NOT depend on this file: check.sh and the other
 # entry points call `podman run` directly, because `podman compose` in 4.x
@@ -6,17 +6,22 @@
 # the behaviour varies by host. Compose is kept for the services that really
 # are long-lived (serve, scheduler) and for people who prefer it.
 #
-# M1 ships check, shell and dev. import/report/serve/scheduler arrive with
-# their milestones rather than being declared against tools that do not exist.
+# check, shell and dev only. import/report/serve/scheduler are not here: the
+# pipeline is a sequence of tools and the order lives in ./report.sh, which
+# knows how to pass the git provenance in. A `report` service would be a second
+# copy of that order, in a file nothing tests, free to drift. Use ./report.sh.
+#
+# The image tag follows VERSION, the same way scripts/lib.sh derives it.
+# Override with IMAGE_TAG in the environment or a .env file.
 
 services:
   check:
     build:
       context: .
       dockerfile: docker/Dockerfile.pipeline
-    image: mig-pipeline:0.2.0
+    image: mig-pipeline:${IMAGE_TAG:-0.3.0}
     # Not paranoia: the cheapest possible regression test for the air-gap
-    # traps in HANDOFF 8.2.
+    # traps in SPEC 8.2.
     network_mode: none
     read_only: true
     tmpfs: [/tmp]
@@ -26,7 +31,7 @@ services:
     command: ["python3", "tools/validate.py", "--projects", "projects", "--schema", "schema"]
 
   shell:
-    image: mig-pipeline:0.2.0
+    image: mig-pipeline:${IMAGE_TAG:-0.3.0}
     network_mode: none
     volumes:
       - .:/work:z
@@ -38,7 +43,7 @@ services:
   # Warm container for the pre-commit hook. `docker compose up -d dev`, then
   # USE_WARM_CONTAINER=1. Purely a latency optimisation; nothing requires it.
   dev:
-    image: mig-pipeline:0.2.0
+    image: mig-pipeline:${IMAGE_TAG:-0.3.0}
     container_name: mig-dev
     network_mode: none
     volumes:

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 build_model.py - DuckDB SQL over the Parquet snapshot -> report_model.json.
-HANDOFF 6.3.
+SPEC 6.3.
 
 report_model.json is the only thing renderers read. It contains every number,
 label and table that will appear in any output, already aggregated. Renderers
-lay out; they do not compute (HANDOFF 11).
+lay out; they do not compute (SPEC 11).
 
 Driven by reports/daily.yaml, so adding a newly-collected field to the deck is
 a config change. A field named in the spec but absent from the data renders
@@ -16,7 +16,7 @@ one place - `query_definition` below. Every table names the definition it was
 counted under, and the definitions are emitted into the model so they can be
 printed next to the numbers.
 
-Determinism (HANDOFF 5.2): the model must be byte-identical for the same
+Determinism (SPEC 5.2): the model must be byte-identical for the same
 input. Every list is sorted, every float has a fixed format, and the only
 clock reading in the whole program is `generated_at`, which can be pinned with
 --generated-at so two runs can be compared byte for byte.
@@ -45,7 +45,9 @@ except ImportError:  # pragma: no cover
     sys.exit("ruamel.yaml is required (it is in the pipeline image)")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from snapshot import TABLES, connect, pipeline_version, table_schemas  # noqa: E402
+from snapshot import (  # noqa: E402
+    TABLES, column_specs, connect, pipeline_version, table_schemas,
+)
 from validate import Schema, load_schema_dir  # noqa: E402
 
 EXIT_OK, EXIT_INVALID, EXIT_TOOL = 0, 1, 2
@@ -63,7 +65,7 @@ def pct(part: float, total: float) -> float:
 
 # --------------------------------------------------------------------------
 # Labels. Looked up once, here, and baked into the model.
-# Renderers never touch the taxonomy (HANDOFF 5.2).
+# Renderers never touch the taxonomy (SPEC 5.2).
 # --------------------------------------------------------------------------
 
 class Labels:
@@ -85,6 +87,17 @@ class Labels:
             return codes + ([UNKNOWN] if UNKNOWN in self.references[reference] else [])
         return []
 
+    def has_labels(self, taxonomy: str | None, reference: str | None) -> bool:
+        """Is there a label source for this column at all?
+
+        `x-ref: projects` points at the project files rather than at a
+        reference list, so a dependency target has no label but its own id.
+        A column like that gets one column in the Excel, not two.
+        """
+        if taxonomy and taxonomy in self.groups:
+            return True
+        return bool(reference and self.references.get(reference))
+
     def label(self, code: str, taxonomy: str | None, reference: str | None,
               lang: str) -> str:
         entry: Any = None
@@ -96,7 +109,7 @@ class Labels:
             value = entry.get(f"label_{lang}")
             if value:
                 return str(value)
-        # No label yet (HANDOFF 12.1). Showing the bare code is honest;
+        # No label yet (SPEC 12.1). Showing the bare code is honest;
         # inventing a label is not. --check-schema warns about every one.
         return code
 
@@ -200,7 +213,7 @@ def distribution(snapshot: Snapshot, spec: dict, definition: dict,
 
     if not snapshot.has(table, column):
         # The moving target: a field named in the spec that nobody has
-        # collected yet. n/a, not a crash and not a zero (HANDOFF 6.3).
+        # collected yet. n/a, not a crash and not a zero (SPEC 6.3).
         result.update({
             "available": False,
             "columns": [], "rows": [],
@@ -331,7 +344,7 @@ def build_coverage(snapshot: Snapshot, fields_tracked: int) -> dict:
         "projects_total": int(total),
         "fields_tracked": fields_tracked,
         # Raw coverage and verified coverage are two separate numbers
-        # everywhere they appear (HANDOFF 11). An import gives you 90% raw
+        # everywhere they appear (SPEC 11). An import gives you 90% raw
         # coverage that means almost nothing.
         "field_coverage_pct": pct(filled, tracked),
         "verified_coverage_pct": pct(verified, total),
@@ -355,12 +368,69 @@ FLAT_ORDER = {
     "dependencies": "from_project, to_project",
 }
 
+# SPEC 5.2 names the dependency columns `from` and `to`. The table cannot:
+# `from` is a SQL keyword. Renamed on the way out, metadata included.
+FLAT_RENAME = {"dependencies": {"from_project": "from", "to_project": "to"}}
+FLAT_DROP = {"dependencies": ("project_id", "idx")}
 
-def build_flat(snapshot: Snapshot) -> dict[str, list[dict]]:
+# The convenience columns computed by the SQL below. Declared here because
+# they exist nowhere else - they are not fields of a project, so the schema
+# has nothing to say about them (SPEC 6.4).
+CONVENIENCE_COLUMNS: list[dict] = [
+    {"key": "datastore_engines", "kind": "text"},
+    {"key": "has_db2", "kind": "text"},
+    {"key": "sites", "kind": "text"},
+    {"key": "os_families", "kind": "text"},
+    {"key": "open_blockers", "kind": "count"},
+]
+
+
+def flat_column_specs(schema_dir_specs: dict[str, list[dict]],
+                      labels: Labels) -> dict[str, list[dict]]:
+    """What each flat table's columns are, and which of them carry codes.
+
+    The renderers lay this out and compute nothing (SPEC 11): a column marked
+    `coded` has a `<key>_label_de` / `<key>_label_en` on every row, already
+    looked up, so the Excel can show the code and the label side by side
+    without ever opening taxonomy.yaml.
+    """
+    # A column the schema says nothing about is one of snapshot.py's own
+    # (project_id, idx, is_placeholder). Its kind follows its declared SQL
+    # type, so the renderer still knows whether it is a number.
+    kind_of_type = {"BIGINT": "count", "BOOLEAN": "flag"}
+
+    columns: dict[str, list[dict]] = {}
+    for table in TABLES:
+        renames = FLAT_RENAME.get(table, {})
+        dropped = FLAT_DROP.get(table, ())
+        specs = []
+        for spec in schema_dir_specs[table]:
+            if spec["key"] in dropped:
+                continue
+            key = renames.get(spec["key"], spec["key"])
+            coded = spec["kind"] == "code" and \
+                labels.has_labels(spec["taxonomy"], spec["reference"])
+            specs.append({
+                "key": key,
+                "kind": spec["kind"] or kind_of_type.get(spec["type"], "text"),
+                "coded": coded,
+                "label_de": key,
+                "label_en": key,
+            })
+        if table == "projects":
+            specs.extend({**c, "coded": False, "label_de": c["key"],
+                          "label_en": c["key"]} for c in CONVENIENCE_COLUMNS)
+        columns[table] = specs
+    return columns
+
+
+def build_flat(snapshot: Snapshot, specs: dict[str, list[dict]],
+               labels: Labels, schema_specs: dict[str, list[dict]]
+               ) -> dict[str, list[dict]]:
     con = snapshot.con
     flat: dict[str, list[dict]] = {}
 
-    # Convenience columns for the projects sheet (HANDOFF 6.4). Managers filter
+    # Convenience columns for the projects sheet (SPEC 6.4). Managers filter
     # on these without thinking about grain; the multi-grain sheets are there
     # for when they need to be correct. Computed here, never in a renderer.
     con.execute(f"""
@@ -393,11 +463,27 @@ def build_flat(snapshot: Snapshot) -> dict[str, list[dict]]:
         cursor = con.execute(f"SELECT * FROM {view} ORDER BY {order}")
         names = [d[0] for d in cursor.description]
         rows = [dict(zip(names, record)) for record in cursor.fetchall()]
-        if table == "dependencies":
-            # HANDOFF 5.2 names these `from` and `to`; the parquet cannot,
-            # because `from` is a SQL keyword.
-            rows = [{"from": r["from_project"], "to": r["to_project"]} for r in rows]
-        flat[table] = rows
+
+        renames = FLAT_RENAME.get(table, {})
+        dropped = FLAT_DROP.get(table, ())
+        coded = {s["key"] for s in specs[table] if s["coded"]}
+        sources = {s["key"]: s for s in schema_specs[table]}
+
+        shaped = []
+        for row in rows:
+            out: dict[str, Any] = {}
+            for name, value in row.items():
+                if name in dropped:
+                    continue
+                key = renames.get(name, name)
+                out[key] = value
+                if key in coded:
+                    source = sources[name]
+                    for lang in ("de", "en"):
+                        out[f"{key}_label_{lang}"] = labels.label(
+                            str(value), source["taxonomy"], source["reference"], lang)
+            shaped.append(out)
+        flat[table] = shaped
     return flat
 
 
@@ -445,7 +531,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as exc:
         print(f"--schema: {exc}", file=sys.stderr)
         return EXIT_TOOL
-    schemas = table_schemas(Schema(root))
+    schema = Schema(root)
+    schemas = table_schemas(schema)
+    schema_specs = column_specs(schema)
+    flat_columns = flat_column_specs(schema_specs, labels)
 
     con = connect()
     snapshot = Snapshot(con, args.snapshot, schemas)
@@ -524,7 +613,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "headline": headline,
         "tables": tables,
         "charts": charts,
-        "flat": build_flat(snapshot),
+        # What the Excel data sheets are made of: the columns, with the
+        # coded ones marked, and the rows with every label already
+        # looked up. A renderer lays this out and computes nothing.
+        "flat_columns": flat_columns,
+        "flat": build_flat(snapshot, flat_columns, labels, schema_specs),
         "definitions": [
             {"key": key,
              "grain": definitions[key].get("grain"),

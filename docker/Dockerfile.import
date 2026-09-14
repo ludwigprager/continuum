@@ -1,4 +1,4 @@
-# Import image. Built outside the air gap, carried in (HANDOFF 8.1).
+# Import image. Built outside the air gap, carried in (SPEC 8.1).
 # Same base as the pipeline image; only openpyxl and PyYAML on top.
 FROM python:3.12-slim-bookworm
 

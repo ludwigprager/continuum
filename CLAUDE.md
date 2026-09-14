@@ -1,6 +1,6 @@
 # Project: legacy-to-cloud-native catalogue & reporting
 
-@HANDOFF.md is the spec for this repo. Read it before any task.
+@SPEC.md is the spec for this repo. Read it before any task.
 The Contracts (§5), Do not (§11) and Gotchas (§9) sections are binding.
 
 Working agreement:

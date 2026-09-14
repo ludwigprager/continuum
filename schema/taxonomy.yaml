@@ -5,7 +5,7 @@
 # To add a whole group: add it here, then point a field at it in
 # project.schema.json with  "x-taxonomy": "<group name>".
 #
-# labels are null on purpose. HANDOFF 12.1: the real labels are not known yet
+# labels are null on purpose. SPEC 12.1: the real labels are not known yet
 # and inventing them would put invented words in front of management.
 # validate.py warns about every null label, so this stays visible until fixed.
 provisional: true
@@ -108,7 +108,7 @@ groups:
       serverless: {label_de: Serverless, label_en: Serverless, colour: null}
       unknown:    {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
 
-  # HANDOFF 2: no booleans anywhere in the data.
+  # SPEC 2: no booleans anywhere in the data.
   completeness_scale:
     order: [full, partial, none, unknown]
     codes:
@@ -153,7 +153,7 @@ groups:
       closed:    {label_de: Geschlossen, label_en: Closed, colour: null}
       unknown:   {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
 
-  # HANDOFF 3: everything an import produces is `imported` - nobody has looked at it.
+  # SPEC 3: everything an import produces is `imported` - nobody has looked at it.
   confidence:
     order: [verified, estimated, imported, unknown]
     codes:

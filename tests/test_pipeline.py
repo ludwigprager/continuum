@@ -1,6 +1,6 @@
 """Tests for snapshot.py and build_model.py (M2).
 
-The load-bearing one is test_model_is_byte_identical_across_runs: HANDOFF 5.2
+The load-bearing one is test_model_is_byte_identical_across_runs: SPEC 5.2
 requires the model to be reproducible, and every other design choice in
 build_model.py (sorted lists, fixed float format, no clock reading outside
 generated_at) exists to make it true.
@@ -63,7 +63,7 @@ def duck():
 # --------------------------------------------------------------------------
 
 def test_model_is_byte_identical_across_runs(tmp_path):
-    """HANDOFF 10, M2: running it twice on identical input produces
+    """SPEC 10, M2: running it twice on identical input produces
     byte-identical output. Asserted here, as the milestone requires."""
     # The same paths both times, as in production: the model records which
     # snapshot produced it, so building from two different directories would
@@ -100,7 +100,7 @@ def test_only_generated_at_moves_between_unpinned_runs(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Grain: the thing that makes two slides disagree (HANDOFF 7)
+# Grain: the thing that makes two slides disagree (SPEC 7)
 # --------------------------------------------------------------------------
 
 def test_a_project_with_two_engines_counts_once_per_engine_not_once_overall(tmp_path):
@@ -143,7 +143,7 @@ def test_cross_tab_totals_are_environments_not_projects(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# unknown is never silently dropped (HANDOFF 11)
+# unknown is never silently dropped (SPEC 11)
 # --------------------------------------------------------------------------
 
 def test_every_distribution_has_an_unknown_row(tmp_path):
@@ -194,7 +194,7 @@ def test_unknown_is_not_zero(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# The moving target (HANDOFF 1, 6.3)
+# The moving target (SPEC 1, 6.3)
 # --------------------------------------------------------------------------
 
 def test_a_field_named_in_the_spec_but_absent_from_the_data_renders_na(tmp_path):
@@ -207,7 +207,7 @@ def test_a_field_named_in_the_spec_but_absent_from_the_data_renders_na(tmp_path)
 
 
 def test_both_placement_shapes_become_environment_rows(tmp_path):
-    """HANDOFF 12.4 is open; snapshot.py normalises so nothing downstream
+    """SPEC 12.4 is open; snapshot.py normalises so nothing downstream
     has to know which shape a file used."""
     snapshot = make_snapshot(tmp_path)
     con = duck()
@@ -269,7 +269,7 @@ def test_nothing_is_carried_over_between_runs(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Model shape (HANDOFF 5.2) and the definitions contract (HANDOFF 7)
+# Model shape (SPEC 5.2) and the definitions contract (SPEC 7)
 # --------------------------------------------------------------------------
 
 def test_model_has_the_documented_top_level_shape(tmp_path):
@@ -285,7 +285,7 @@ def test_model_has_the_documented_top_level_shape(tmp_path):
 
 
 def test_every_table_names_a_definition_that_exists(tmp_path):
-    """HANDOFF 7: reference its key from every table in the model."""
+    """SPEC 7: reference its key from every table in the model."""
     snapshot = make_snapshot(tmp_path)
     _, model = make_model(tmp_path, snapshot)
     known = {d["key"] for d in model["definitions"]}
@@ -314,7 +314,7 @@ def test_labels_are_baked_in_so_renderers_never_read_the_taxonomy(tmp_path):
 
 
 def test_flat_projects_carry_the_convenience_columns(tmp_path):
-    """HANDOFF 6.4: managers filter on these without thinking about grain."""
+    """SPEC 6.4: managers filter on these without thinking about grain."""
     snapshot = make_snapshot(tmp_path)
     _, model = make_model(tmp_path, snapshot)
     row = next(r for r in model["flat"]["projects"] if r["project_id"] == "payment-gateway")

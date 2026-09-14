@@ -9,17 +9,24 @@
 
 set -euo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export REPO_ROOT
+
+# The image tag follows VERSION, which is also the pipeline_version recorded in
+# every manifest. Tying the two together means a run can never silently reuse
+# an image built from different requirements: bump VERSION when the image
+# changes and the next run rebuilds instead of finding a stale tag.
 IMAGE_NAME="${IMAGE_NAME:-mig-pipeline}"
-IMAGE_TAG="${IMAGE_TAG:-0.2.0}"
+IMAGE_TAG="${IMAGE_TAG:-$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo 0)}"
 IMAGE_REF="${IMAGE_REF:-${IMAGE_NAME}:${IMAGE_TAG}}"
 
 # The importer runs rarely and does not need the renderer stack, so it has its
-# own image (HANDOFF 8.1). Entry points that need it set DOCKERFILE and
+# own image (SPEC 8.1). Entry points that need it set DOCKERFILE and
 # IMAGE_REF before calling run_in_container.
 IMPORT_IMAGE_REF="${IMPORT_IMAGE_REF:-mig-import:${IMAGE_TAG}}"
 DOCKERFILE="${DOCKERFILE:-docker/Dockerfile.pipeline}"
 
-# Switch to the import image for this shell. See HANDOFF 8.1.
+# Switch to the import image for this shell. See SPEC 8.1.
 use_import_image() {
     IMAGE_REF="$IMPORT_IMAGE_REF"
     DOCKERFILE="docker/Dockerfile.import"
@@ -28,10 +35,7 @@ use_import_image() {
 # Name of the optional warm container used by the pre-commit hook.
 DEV_CONTAINER="${DEV_CONTAINER:-mig-dev}"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export REPO_ROOT
-
-# Exit codes (HANDOFF 5.3): 0 ok, 1 invalid data, 2 tool/usage error.
+# Exit codes (SPEC 5.3): 0 ok, 1 invalid data, 2 tool/usage error.
 readonly EXIT_TOOL=2
 
 die() { printf '%s\n' "$*" >&2; exit "$EXIT_TOOL"; }

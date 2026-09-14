@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Import the legacy spreadsheet into projects/. Runs in the import image,
-# which carries openpyxl and PyYAML and nothing else (HANDOFF 8.1).
+# which carries openpyxl and PyYAML and nothing else (SPEC 8.1).
 #
 #   ./import.sh testdata                 # generate a synthetic projekte.xlsx
 #   ./import.sh profile  projekte.xlsx   # -> import/profile.md, mapping.yaml, value_map.yaml
@@ -31,7 +31,7 @@ case "$CMD" in
     convert)
         [ $# -ge 1 ] || die "import.sh convert: need the spreadsheet path"
         # projects/ is flat: one file per project, the owning team is
-        # ownership.team_id inside it (HANDOFF 2). --group-column none stops
+        # ownership.team_id inside it (SPEC 2). --group-column none stops
         # the importer auto-detecting a Team column and recreating per-team
         # directories.
         run_in_container --rw -- python3 tools/import_xlsx.py convert "$@" \

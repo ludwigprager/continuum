@@ -22,7 +22,7 @@ Adding a field is therefore a schema edit, not a code change. The only place
 domain field names appear is the plausibility rules at the bottom, which are
 inherently about specific fields; each is a small self-contained function.
 
-Exit codes (HANDOFF 5.3): 0 ok, 1 invalid data, 2 tool/usage error.
+Exit codes (SPEC 5.3): 0 ok, 1 invalid data, 2 tool/usage error.
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ def normalise_dates(node: Any) -> Any:
 
     Both spellings are legal input; this makes them the same value before the
     schema sees them. Versions deliberately get no such treatment - an unquoted
-    7.9 must fail loudly, because it has already lost precision (HANDOFF 9).
+    7.9 must fail loudly, because it has already lost precision (SPEC 9).
     """
     if isinstance(node, dict):
         for key in list(node.keys()):
@@ -405,7 +405,7 @@ def structure_findings(doc: Any, rel: str, schema: Schema,
         path = list(err.absolute_path)
 
         # `_unmapped` holds whatever the importer could not map. Arbitrary
-        # content by contract (HANDOFF 3) - never structurally validated.
+        # content by contract (SPEC 3) - never structurally validated.
         if path and path[0] == "_unmapped":
             continue
 
@@ -440,7 +440,7 @@ def structure_findings(doc: Any, rel: str, schema: Schema,
             label = missing[0] if missing else "?"
             if not path:
                 fix = (f"Every project file needs {label!r}. "
-                       "Everything else may be missing (HANDOFF 5.1).")
+                       "Everything else may be missing (SPEC 5.1).")
             else:
                 # A nested `required` only applies because the parent block is
                 # present. Saying "every project file needs it" would be false
@@ -544,7 +544,7 @@ def referential_findings(doc: Any, rel: str, schema: Schema,
 
 def cycle_findings(graphs: dict[str, dict[str, list]],
                    locations: dict[str, tuple[str, Any]]) -> list[Finding]:
-    """Report the cycle itself, not just that one exists (HANDOFF 6.1)."""
+    """Report the cycle itself, not just that one exists (SPEC 6.1)."""
     findings: list[Finding] = []
     for graph_name, edges in sorted(graphs.items()):
         colour: dict[str, int] = {}
@@ -667,7 +667,7 @@ def _placement(doc):
     if dig(doc, "placement.datacenter") and dig(doc, "placement.environments"):
         yield ("placement",
                "both a single 'datacenter' and an 'environments' list are set",
-               "Both shapes are legal while HANDOFF 12.4 is open, but not together:\n"
+               "Both shapes are legal while SPEC 12.4 is open, but not together:\n"
                "  the site cross-tab would count this project twice.")
 
 
@@ -676,7 +676,7 @@ def _verified(doc):
     if dig(doc, "_meta.confidence") == "verified" and not dig(doc, "_meta.last_reviewed"):
         yield ("_meta.last_reviewed",
                "confidence is 'verified' but last_reviewed is empty",
-               "Verified coverage is reported separately to management (HANDOFF 11).\n"
+               "Verified coverage is reported separately to management (SPEC 11).\n"
                "  A verification with no date behind it cannot be audited.")
 
 
@@ -730,7 +730,7 @@ SCHEMA_BASENAME = "project.schema"
 def schema_file_in(schema_dir: Path) -> Path:
     """The project schema, as YAML by preference.
 
-    YAML because the people who maintain it hand-edit YAML all day (HANDOFF 2)
+    YAML because the people who maintain it hand-edit YAML all day (SPEC 2)
     and because it takes comments: the recipe for adding a field lives at the
     top of the file being edited. JSON is still accepted so an older checkout,
     or `import_xlsx.py derive-schema` output, keeps working.
@@ -854,7 +854,7 @@ def check_schema(schema_dir: Path) -> list[Finding]:
                 WARNING, "schema.no-unknown-code",
                 f"taxonomy group {name!r} has no 'unknown' code", rel_tax,
                 fix="unknown must be an explicit row in every distribution, "
-                    "never silently dropped (HANDOFF 11)."))
+                    "never silently dropped (SPEC 11)."))
         for code, labels in sorted(codes.items()):
             if not isinstance(labels, dict) or labels.get("label_de") is None:
                 unlabelled.append(f"{name}/{code}")
@@ -864,7 +864,7 @@ def check_schema(schema_dir: Path) -> list[Finding]:
             WARNING, "schema.unlabelled-codes",
             f"{len(unlabelled)} code(s) have no German label: {joined(unlabelled, 8)}",
             rel_tax,
-            fix="HANDOFF 12.1: real labels are the top blocker for the deck (M5).\n"
+            fix="SPEC 12.1: real labels are the top blocker for the deck (M5).\n"
                 "  Until they are filled in, charts would be labelled with bare codes."))
 
     for name, data in sorted(references.items()):
@@ -891,7 +891,7 @@ def relative_path(path: Path) -> str:
 
 def project_files(projects_dir: Path) -> list[Path]:
     # Skip anything starting with `_`: _import_manifest.yaml is provenance,
-    # not a project (HANDOFF 3).
+    # not a project (SPEC 3).
     return sorted(p for p in projects_dir.rglob("*.yaml")
                   if not p.name.startswith("_")
                   and not any(part.startswith("_") for part in p.relative_to(projects_dir).parts))
@@ -975,7 +975,7 @@ def validate(projects_dir: Path, schema_dir: Path) -> tuple[list[Finding], dict]
         "projects_total": len(per_project),
         "fields_tracked": len(tracked),
         # Raw and verified coverage are two different numbers and are never
-        # merged into one (HANDOFF 11).
+        # merged into one (SPEC 11).
         "field_coverage_pct": pct(total_filled, total_tracked),
         "verified_coverage_pct": pct(len(verified), len(per_project)),
         "by_team": [
@@ -1057,7 +1057,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Exiting 0 on an empty directory is how a miswired CI job passes forever.
         print(f"--projects: {args.projects} exists but contains no project files.\n"
               "  Expected *.yaml under it; names starting with '_' are skipped by "
-              "design (HANDOFF 3).\n"
+              "design (SPEC 3).\n"
               "  Exiting 2 rather than 0: an empty directory is a wiring mistake, "
               "not a clean bill of health.", file=sys.stderr)
         return EXIT_TOOL

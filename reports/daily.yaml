@@ -1,7 +1,7 @@
 # Which numbers and tables appear in the daily report.
 #
 # This file is the reason adding a newly-collected field to the deck is a
-# config change and not a code change (HANDOFF 6.3). A field named here but
+# config change and not a code change (SPEC 6.3). A field named here but
 # absent from the data renders n/a; it does not crash the run.
 #
 # Every table names the `definition` it was counted under. Those live in
@@ -125,7 +125,7 @@ tables:
 
   # Deliberately names a column that does not exist in the data at all - a
   # field somebody added to the spec before anyone started collecting it.
-  # Must render n/a rather than crash (HANDOFF 6.3).
+  # Must render n/a rather than crash (SPEC 6.3).
   by_backup_class:
     kind: distribution
     definition: projects_by_classification
@@ -133,6 +133,30 @@ tables:
     taxonomy: security_class
     title_de: "Projekte je Backup-Klasse"
     title_en: "Projects by backup class"
+
+# Pre-built pivot tables, shipped inside templates/workbook.xlsx.
+#
+# openpyxl cannot create a pivot table (SPEC 6.4), so these are built into the
+# template once by tools/make_workbook_template.py and refreshed by Excel when
+# the workbook is opened. They are a convenience: the data sheets are real
+# Excel tables, so anyone can build their own pivot from them.
+#
+# `rows`/`columns`/`measure` name fields, not sheet columns: a coded field is
+# resolved to its `_code` column, which sorts in the taxonomy's order.
+# `grain` must be one of the five tables - a pivot over a grain is only
+# meaningful if it counts what that grain counts (SPEC 7).
+pivots:
+  site_x_os:
+    sheet: pivot_site_os
+    grain: environments
+    rows: datacenter
+    columns: os_family
+    measure: project_id
+    definition: environments_by_site_and_os
+    title_de: "Standort x Betriebssystem (Pivot)"
+    title_en: "Site x OS family (pivot)"
+    measure_caption_de: "Umgebungen"
+    measure_caption_en: "Environments"
 
 # Rendered once as PNG by charts.py (M4) and embedded everywhere else.
 charts:
