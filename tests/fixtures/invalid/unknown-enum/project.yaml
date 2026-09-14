@@ -1,0 +1,10 @@
+# M1 acceptance: an enum code that is not in taxonomy.yaml.
+schema_version: 1
+id: unknown-enum
+name: Unknown enum code
+ownership:
+  team_id: team-alpha
+classification:
+  classification_a: CA-2
+  classification_b: CB-7
+  security_class: S3

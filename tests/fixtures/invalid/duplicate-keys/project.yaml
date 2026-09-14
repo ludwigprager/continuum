@@ -1,0 +1,10 @@
+# Two `platform:` blocks. PyYAML keeps the last one silently and the file is
+# quietly wrong forever; ruamel rejects it. This is why layer 1 exists.
+schema_version: 1
+id: duplicate-keys
+name: Duplicate keys
+platform:
+  cpu_cores: 8
+  storage_gb: 100
+platform:
+  cpu_cores: 16

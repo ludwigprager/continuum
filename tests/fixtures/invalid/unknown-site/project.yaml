@@ -1,0 +1,10 @@
+# datacenter that is not in schema/sites.yaml, in both placement shapes.
+schema_version: 1
+id: unknown-site
+name: Unknown site
+ownership: {team_id: team-alpha}
+placement:
+  environments:
+    - name: prod
+      datacenter: xyz-99
+      os: {family: windows, version: "2019"}

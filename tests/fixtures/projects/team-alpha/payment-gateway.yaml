@@ -1,0 +1,45 @@
+# Fully populated, hand-verified. The "everything present" case.
+schema_version: 1
+id: payment-gateway
+name: Payment Gateway
+ownership:
+  team_id: team-alpha
+  contact: null
+classification:
+  classification_a: CA-2
+  classification_b: CB-3
+  security_class: S3
+placement:
+  environments:
+    - name: prod
+      datacenter: muc-01
+      os: {family: windows, version: "2016", eol: 2027-01-12}
+    - name: test
+      datacenter: muc-01
+      os: {family: windows, version: "2016", eol: 2027-01-12}
+platform:
+  cpu_cores: 16
+  storage_gb: 500
+  storage_classes: [block, object]
+  deployment_model: vm
+  containerised: none
+datastores:
+  - {engine: db2, version: "11.5", role: primary}
+  - {engine: redis, version: "7.0", role: cache}
+migration:
+  strategy: replatform
+  status: assessed
+  target_date: 2027-03-31
+  blockers:
+    - {id: BLK-014, type: licensing, severity: high, status: open}
+integration:
+  depends_on: [customer-master]
+operations:
+  tier: tier-1
+  rto_hours: 4
+  rpo_hours: 1
+_unmapped: {}
+_meta:
+  confidence: verified
+  last_reviewed: 2026-09-01
+  reviewed_by: it@celp.de

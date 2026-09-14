@@ -1,0 +1,28 @@
+# The v1 imported shape: a single `datacenter` scalar rather than an
+# `environments` list. Both are accepted while HANDOFF 12.4 is open.
+schema_version: 1
+id: reporting-hub
+name: Reporting Hub
+ownership:
+  team_id: team-beta
+classification:
+  classification_a: CA-2
+  classification_b: CB-4
+  security_class: S2
+placement:
+  datacenter: fra-02
+platform:
+  cpu_cores: 32
+  storage_gb: 4000
+  storage_classes: [block, file, object]
+  deployment_model: bare_metal
+datastores:
+  - {engine: mssql, version: "2019", role: primary}
+migration:
+  strategy: replatform
+  status: in_progress
+operations:
+  tier: tier-2
+  rto_hours: 24
+_meta:
+  confidence: imported

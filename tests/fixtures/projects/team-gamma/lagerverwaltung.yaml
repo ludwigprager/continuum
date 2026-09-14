@@ -1,0 +1,38 @@
+# Explicit nulls rather than omitted keys. null, a missing key and the string
+# "unknown" all mean the same thing and must all validate.
+schema_version: 1
+id: lagerverwaltung
+name: Lagerverwaltung
+ownership:
+  team_id: team-gamma
+  contact: null
+classification:
+  classification_a: null
+  classification_b: null
+  security_class: null
+placement:
+  datacenter: null
+  environments: null
+platform:
+  cpu_cores: null
+  storage_gb: null
+  storage_classes: null
+  deployment_model: null
+  containerised: null
+datastores: null
+migration:
+  strategy: null
+  status: null
+  target_date: null
+  blockers: null
+integration:
+  depends_on: null
+operations:
+  tier: null
+  rto_hours: null
+  rpo_hours: null
+_unmapped: null
+_meta:
+  confidence: imported
+  last_reviewed: null
+  reviewed_by: null

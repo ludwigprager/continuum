@@ -1,0 +1,8 @@
+# Depends on a project that is not in the catalogue. A dangling reference
+# drops silently out of the dependency graph if nobody checks it.
+schema_version: 1
+id: dangling-dep
+name: Dangling dependency
+ownership: {team_id: team-alpha}
+integration:
+  depends_on: [does-not-exist]

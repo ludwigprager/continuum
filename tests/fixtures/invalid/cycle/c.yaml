@@ -1,0 +1,8 @@
+# Closes the ring: alpha -> beta -> gamma -> alpha.
+# The error must name the ring, not just say that one exists.
+schema_version: 1
+id: gamma-service
+name: Gamma
+ownership: {team_id: team-gamma}
+integration:
+  depends_on: [alpha-service]

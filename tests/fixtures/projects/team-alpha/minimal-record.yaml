@@ -1,0 +1,5 @@
+# The absolute minimum a file may contain. Everything except id and
+# schema_version may be missing (HANDOFF 5.1). Coverage will be ~0% and that
+# is the correct, honest answer - not a validation failure.
+schema_version: 1
+id: minimal-record

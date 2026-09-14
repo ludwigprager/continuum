@@ -1,0 +1,33 @@
+# Plausibility warnings, not errors: reported as migrated while blockers are
+# still open. This pair reaches management as "done" and is usually wrong.
+schema_version: 1
+id: tarifrechner
+name: Tarifrechner
+ownership:
+  team_id: team-gamma
+classification:
+  classification_a: CA-2
+  classification_b: CB-1
+  security_class: S2
+placement:
+  environments:
+    - name: prod
+      datacenter: muc-01
+      os: {family: rhel, version: "9.2"}
+platform:
+  cpu_cores: 8
+  storage_gb: 100
+  storage_classes: [block]
+  deployment_model: container
+  containerised: none
+migration:
+  strategy: replatform
+  status: migrated
+  blockers:
+    - {id: BLK-033, type: compliance, severity: high, status: open}
+    - {id: BLK-034, type: budget, severity: low, status: closed}
+operations:
+  tier: tier-2
+  rto_hours: 12
+_meta:
+  confidence: imported

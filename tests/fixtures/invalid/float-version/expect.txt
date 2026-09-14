@@ -1,0 +1,2 @@
+structure.type
+structure.type

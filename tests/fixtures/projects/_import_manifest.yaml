@@ -1,0 +1,7 @@
+# Not a project file. Anything starting with `_` must be skipped (HANDOFF 3).
+# If the validator ever stops skipping it, this fixture fails loudly.
+source: projekte.xlsx
+source_sha256: 0000000000000000000000000000000000000000000000000000000000000000
+imported_at: 2026-09-01
+rows_read: 12
+tool: import_xlsx.py

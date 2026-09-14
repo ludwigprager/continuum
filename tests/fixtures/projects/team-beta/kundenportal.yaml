@@ -1,0 +1,35 @@
+# German text, umlauts, and a heavy _unmapped block straight from the importer.
+# _unmapped holds arbitrary content and is exempt from structural validation.
+schema_version: 1
+id: kundenportal
+name: Kundenportal Süd (Außenstellen)
+ownership:
+  team_id: team-beta
+  contact: null
+classification:
+  classification_a: CA-3
+  classification_b: CB-2
+  security_class: S1
+placement:
+  datacenter: ber-01
+platform:
+  cpu_cores: 4
+  storage_gb: 250
+  deployment_model: vm
+migration:
+  strategy: rehost
+  status: assessed
+integration:
+  depends_on: [customer-master, payment-gateway]
+_unmapped:
+  Bemerkung: "Migration 2023 gestoppt, Lizenzthema; Rückfragen an die Fachabteilung"
+  Ansprechpartner: M. Huber
+  Altspalte: null
+  "Kosten p.a. (EUR)": "12.500"
+  Freigabe: nein
+  Prüfvermerk: |
+    Mehrzeilige Bemerkung aus dem Altbestand.
+    Zweite Zeile, enthält ein Semikolon; und ein Komma.
+_meta:
+  confidence: imported
+  last_reviewed: null

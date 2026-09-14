@@ -1,0 +1,13 @@
+# Datacenter codes. Referenced from project.schema.json via "x-ref": "sites".
+#
+# PROVISIONAL: seeded from the test fixtures, not from the real estate list.
+# A site missing from here makes every project at that site fail validation,
+# so this must be replaced with the authoritative list before real data lands.
+provisional: true
+
+entries:
+  muc-01: {label_de: München 01, label_en: Munich 01, country: DE}
+  fra-02: {label_de: Frankfurt 02, label_en: Frankfurt 02, country: DE}
+  ber-01: {label_de: Berlin 01, label_en: Berlin 01, country: DE}
+  vie-01: {label_de: Wien 01, label_en: Vienna 01, country: AT}
+  unknown: {label_de: Unbekannt, label_en: Unknown, country: null}

@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/mig/project.schema.json",
+  "title": "Project record",
+  "description": "One project. Everything except id and schema_version may be missing; missing means unknown, never zero (HANDOFF 5.1).",
+
+  "x-doc": {
+    "adding-a-field": [
+      "1. Add the property below, pointing at a $def: {\"$ref\": \"#/$defs/code\"}.",
+      "2. If it is a coded field, add \"x-taxonomy\": \"<group>\" and put the codes in schema/taxonomy.yaml.",
+      "3. If it names something in another file, add \"x-ref\": \"sites\" | \"teams\" | \"projects\".",
+      "4. If it should count toward coverage, add \"x-tracked\": true.",
+      "validate.py reads these annotations. It contains no field names of its own."
+    ],
+    "annotations": {
+      "x-taxonomy": "value must be a code in that taxonomy.yaml group",
+      "x-ref": "value must be a key in that reference file (projects = the project ids themselves)",
+      "x-tracked": "counts toward the coverage percentage",
+      "x-graph": "edges of a named graph; validate.py checks it for cycles",
+      "x-kind": "drives the wording of the error message; set on the $defs, not on fields"
+    }
+  },
+
+  "type": "object",
+  "required": ["schema_version", "id"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": {"const": 1, "x-kind": "schema_version"},
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "x-kind": "id"
+    },
+    "name": {"$ref": "#/$defs/text", "x-tracked": true},
+
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "team_id": {"$ref": "#/$defs/code", "x-ref": "teams", "x-tracked": true},
+        "contact": {"$ref": "#/$defs/text"}
+      }
+    },
+
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "classification_a": {"$ref": "#/$defs/code", "x-taxonomy": "classification_a", "x-tracked": true},
+        "classification_b": {"$ref": "#/$defs/code", "x-taxonomy": "classification_b", "x-tracked": true},
+        "security_class":   {"$ref": "#/$defs/code", "x-taxonomy": "security_class", "x-tracked": true}
+      }
+    },
+
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Both shapes are accepted: a single `datacenter` scalar (v1 imported data) and an `environments` list (target schema). HANDOFF 12.4 is still open; snapshot.py normalises in M2.",
+      "properties": {
+        "datacenter": {"$ref": "#/$defs/code", "x-ref": "sites", "x-tracked": true},
+        "environments": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {"$ref": "#/$defs/text"},
+              "datacenter": {"$ref": "#/$defs/code", "x-ref": "sites", "x-tracked": true},
+              "os": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "family":  {"$ref": "#/$defs/code", "x-taxonomy": "os_family", "x-tracked": true},
+                  "version": {"$ref": "#/$defs/version"},
+                  "eol":     {"$ref": "#/$defs/date"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu_cores":  {"$ref": "#/$defs/count", "x-tracked": true},
+        "storage_gb": {"$ref": "#/$defs/count", "x-tracked": true},
+        "storage_classes": {
+          "type": ["array", "null"],
+          "items": {"$ref": "#/$defs/code", "x-taxonomy": "storage_class"},
+          "x-tracked": true
+        },
+        "deployment_model": {"$ref": "#/$defs/code", "x-taxonomy": "deployment_model", "x-tracked": true},
+        "containerised":    {"$ref": "#/$defs/code", "x-taxonomy": "completeness_scale"}
+      }
+    },
+
+    "datastores": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "engine":  {"$ref": "#/$defs/code", "x-taxonomy": "engine", "x-tracked": true},
+          "version": {"$ref": "#/$defs/version"},
+          "role":    {"$ref": "#/$defs/code", "x-taxonomy": "datastore_role"}
+        }
+      }
+    },
+
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {"$ref": "#/$defs/code", "x-taxonomy": "migration_strategy", "x-tracked": true},
+        "status":   {"$ref": "#/$defs/code", "x-taxonomy": "migration_status", "x-tracked": true},
+        "target_date": {"$ref": "#/$defs/date"},
+        "blockers": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id":       {"$ref": "#/$defs/text"},
+              "type":     {"$ref": "#/$defs/code", "x-taxonomy": "blocker_type"},
+              "severity": {"$ref": "#/$defs/code", "x-taxonomy": "severity"},
+              "status":   {"$ref": "#/$defs/code", "x-taxonomy": "blocker_status"}
+            }
+          }
+        }
+      }
+    },
+
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "depends_on": {
+          "type": ["array", "null"],
+          "items": {"$ref": "#/$defs/code", "x-ref": "projects"},
+          "x-graph": "depends_on",
+          "x-tracked": true
+        }
+      }
+    },
+
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tier":      {"$ref": "#/$defs/code", "x-taxonomy": "tier", "x-tracked": true},
+        "rto_hours": {"$ref": "#/$defs/count"},
+        "rpo_hours": {"$ref": "#/$defs/count"}
+      }
+    },
+
+    "_unmapped": {
+      "type": ["object", "null"],
+      "description": "Columns the importer could not map. Arbitrary content, exempt from all structural rules (HANDOFF 3)."
+    },
+
+    "_meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source":        {"$ref": "#/$defs/text"},
+        "source_sheet":  {"$ref": "#/$defs/text"},
+        "source_row":    {"$ref": "#/$defs/count"},
+        "source_sha256": {"$ref": "#/$defs/text"},
+        "imported_at":   {"$ref": "#/$defs/date"},
+        "confidence":    {"$ref": "#/$defs/code", "x-taxonomy": "confidence"},
+        "last_reviewed": {"$ref": "#/$defs/date"},
+        "reviewed_by":   {"$ref": "#/$defs/text"}
+      }
+    }
+  },
+
+  "$defs": {
+    "text": {
+      "type": ["string", "null"],
+      "x-kind": "text"
+    },
+    "code": {
+      "type": ["string", "null"],
+      "description": "A code. Which codes are valid is decided by x-taxonomy/x-ref, never here - so adding a code is a one-file change.",
+      "x-kind": "code"
+    },
+    "version": {
+      "type": ["string", "null"],
+      "pattern": "^([0-9][0-9A-Za-z.+_~-]*|unknown)$",
+      "description": "Always a string. 7.9 unquoted is a float and prints as 7.9000000000000004; \"2016\" unquoted is an integer (HANDOFF 9).",
+      "x-kind": "version"
+    },
+    "date": {
+      "type": ["string", "null"],
+      "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2}|unknown)$",
+      "description": "ISO date. A bare YAML date (2026-09-14) is accepted and normalised to a string before validation.",
+      "x-kind": "date"
+    },
+    "count": {
+      "anyOf": [
+        {"type": "integer", "minimum": 0},
+        {"const": "unknown"},
+        {"type": "null"}
+      ],
+      "description": "A non-negative count, or `unknown`. Never 0 for missing (HANDOFF 5.1).",
+      "x-kind": "count"
+    }
+  }
+}

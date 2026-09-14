@@ -1,0 +1,32 @@
+# Retired system. `retire` plus a `none` datastore is a legitimate combination
+# and must not be mistaken for missing data.
+schema_version: 1
+id: stammdaten-archiv
+name: Stammdaten-Archiv (Altbestand)
+ownership:
+  team_id: team-delta
+classification:
+  classification_a: CA-1
+  classification_b: CB-1
+  security_class: S1
+placement:
+  environments:
+    - name: prod
+      datacenter: ber-01
+      os: {family: other, version: unknown}
+platform:
+  cpu_cores: 1
+  storage_gb: 50
+  storage_classes: [file]
+  deployment_model: bare_metal
+datastores:
+  - {engine: none, role: unknown}
+migration:
+  strategy: retire
+  status: planned
+  target_date: 2026-11-30
+operations:
+  tier: tier-3
+  rto_hours: unknown
+_meta:
+  confidence: imported

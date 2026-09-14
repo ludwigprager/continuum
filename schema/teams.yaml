@@ -1,0 +1,12 @@
+# Team ids and contacts. Referenced via "x-ref": "teams".
+# Team id must match the directory name under projects/ (CODEOWNERS depends on it).
+#
+# PROVISIONAL: seeded from the test fixtures.
+provisional: true
+
+entries:
+  team-alpha: {label_de: Team Alpha, label_en: Team Alpha, contact: null}
+  team-beta:  {label_de: Team Beta,  label_en: Team Beta,  contact: null}
+  team-gamma: {label_de: Team Gamma, label_en: Team Gamma, contact: null}
+  team-delta: {label_de: Team Delta, label_en: Team Delta, contact: null}
+  unknown:    {label_de: Unbekannt,  label_en: Unknown,    contact: null}

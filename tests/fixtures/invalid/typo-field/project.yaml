@@ -1,0 +1,8 @@
+# `secrutiy_class` instead of `security_class` - the motivating example for
+# additionalProperties: false. Without it this field vanishes without a word.
+schema_version: 1
+id: typo-field
+name: Typo in a field name
+classification:
+  classification_a: CA-1
+  secrutiy_class: S3

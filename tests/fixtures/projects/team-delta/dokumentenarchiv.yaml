@@ -1,0 +1,32 @@
+# No prod environment: a warning, because it is either genuinely not in
+# production or an environment is missing from the file.
+schema_version: 1
+id: dokumentenarchiv
+name: Dokumentenarchiv
+ownership:
+  team_id: team-delta
+classification:
+  classification_a: CA-3
+  classification_b: CB-4
+  security_class: S3
+placement:
+  environments:
+    - name: test
+      datacenter: ber-01
+      os: {family: sles, version: "15"}
+    - name: int
+      datacenter: ber-01
+      os: {family: sles, version: "15"}
+platform:
+  cpu_cores: 2
+  storage_gb: 8000
+  storage_classes: [object]
+  deployment_model: vm
+migration:
+  strategy: retain
+  status: assessed
+operations:
+  tier: tier-3
+  rto_hours: 168
+_meta:
+  confidence: imported

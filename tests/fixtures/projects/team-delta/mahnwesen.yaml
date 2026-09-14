@@ -1,0 +1,37 @@
+# Version strings that are traps when unquoted (HANDOFF 9):
+#   7.9   -> float, prints as 7.9000000000000004
+#   2016  -> integer
+#   15    -> integer
+# All quoted here. tests/fixtures/invalid/float-version/ has the failing form.
+schema_version: 1
+id: mahnwesen
+name: Mahnwesen
+ownership:
+  team_id: team-delta
+classification:
+  classification_a: CA-1
+  classification_b: CB-2
+  security_class: S1
+placement:
+  environments:
+    - name: prod
+      datacenter: fra-02
+      os: {family: rhel, version: "7.9", eol: 2024-06-30}
+platform:
+  cpu_cores: 4
+  storage_gb: 300
+  storage_classes: [block]
+  deployment_model: vm
+datastores:
+  - {engine: mssql, version: "2016", role: primary}
+  - {engine: postgres, version: "15", role: secondary}
+migration:
+  strategy: rehost
+  status: assessed
+integration:
+  depends_on: [customer-master, fakturierung]
+operations:
+  tier: tier-2
+  rto_hours: 48
+_meta:
+  confidence: imported

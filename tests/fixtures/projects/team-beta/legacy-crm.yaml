@@ -1,0 +1,33 @@
+# `unknown` used everywhere it is legal. Must validate cleanly: a team that
+# cannot submit a half-filled file keeps the data in its own spreadsheet
+# and you never see it (HANDOFF 2).
+schema_version: 1
+id: legacy-crm
+name: Legacy CRM
+ownership:
+  team_id: unknown
+classification:
+  classification_a: unknown
+  classification_b: unknown
+  security_class: unknown
+placement:
+  datacenter: unknown
+platform:
+  cpu_cores: unknown
+  storage_gb: unknown
+  storage_classes: [unknown]
+  deployment_model: unknown
+  containerised: unknown
+datastores:
+  - {engine: unknown, version: unknown, role: unknown}
+migration:
+  strategy: unknown
+  status: not_assessed
+  target_date: unknown
+operations:
+  tier: unknown
+  rto_hours: unknown
+_meta:
+  confidence: imported
+  last_reviewed: null
+  reviewed_by: null

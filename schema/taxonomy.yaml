@@ -1,0 +1,163 @@
+# Enum codes -> labels. THE ONLY PLACE codes are defined.
+#
+# To add a code: add it under the group's `codes:` and to `order:`. Nothing
+# else changes - not the JSON Schema, not validate.py.
+# To add a whole group: add it here, then point a field at it in
+# project.schema.json with  "x-taxonomy": "<group name>".
+#
+# labels are null on purpose. HANDOFF 12.1: the real labels are not known yet
+# and inventing them would put invented words in front of management.
+# validate.py warns about every null label, so this stays visible until fixed.
+provisional: true
+
+groups:
+  classification_a:
+    order: [CA-1, CA-2, CA-3, unknown]
+    codes:
+      CA-1: {label_de: null, label_en: null, colour: null}
+      CA-2: {label_de: null, label_en: null, colour: null}
+      CA-3: {label_de: null, label_en: null, colour: null}
+      unknown: {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  classification_b:
+    order: [CB-1, CB-2, CB-3, CB-4, unknown]
+    codes:
+      CB-1: {label_de: null, label_en: null, colour: null}
+      CB-2: {label_de: null, label_en: null, colour: null}
+      CB-3: {label_de: null, label_en: null, colour: null}
+      CB-4: {label_de: null, label_en: null, colour: null}
+      unknown: {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  security_class:
+    order: [S1, S2, S3, S4, unknown]
+    codes:
+      S1: {label_de: null, label_en: null, colour: null}
+      S2: {label_de: null, label_en: null, colour: null}
+      S3: {label_de: null, label_en: null, colour: null}
+      S4: {label_de: null, label_en: null, colour: null}
+      unknown: {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  # These have real meanings outside this organisation, so labels are filled in.
+  migration_strategy:
+    order: [rehost, replatform, refactor, repurchase, retire, retain, relocate, unknown]
+    codes:
+      rehost:     {label_de: Rehost, label_en: Rehost, colour: null}
+      replatform: {label_de: Replatform, label_en: Replatform, colour: null}
+      refactor:   {label_de: Refactor, label_en: Refactor, colour: null}
+      repurchase: {label_de: Repurchase, label_en: Repurchase, colour: null}
+      retire:     {label_de: Stilllegung, label_en: Retire, colour: null}
+      retain:     {label_de: Verbleib, label_en: Retain, colour: null}
+      relocate:   {label_de: Relocate, label_en: Relocate, colour: null}
+      unknown:    {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  migration_status:
+    order: [not_assessed, assessed, planned, in_progress, migrated, verified, rolled_back, unknown]
+    codes:
+      not_assessed: {label_de: Nicht bewertet, label_en: Not assessed, colour: null}
+      assessed:     {label_de: Bewertet, label_en: Assessed, colour: null}
+      planned:      {label_de: Geplant, label_en: Planned, colour: null}
+      in_progress:  {label_de: In Arbeit, label_en: In progress, colour: null}
+      migrated:     {label_de: Migriert, label_en: Migrated, colour: null}
+      verified:     {label_de: Verifiziert, label_en: Verified, colour: null}
+      rolled_back:  {label_de: Zurückgerollt, label_en: Rolled back, colour: null}
+      unknown:      {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  engine:
+    order: [db2, mssql, oracle, postgres, redis, none, unknown]
+    codes:
+      db2:      {label_de: Db2, label_en: Db2, colour: null}
+      mssql:    {label_de: MS SQL Server, label_en: MS SQL Server, colour: null}
+      oracle:   {label_de: Oracle, label_en: Oracle, colour: null}
+      postgres: {label_de: PostgreSQL, label_en: PostgreSQL, colour: null}
+      redis:    {label_de: Redis, label_en: Redis, colour: null}
+      none:     {label_de: Keine, label_en: None, colour: null}
+      unknown:  {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  datastore_role:
+    order: [primary, secondary, cache, unknown]
+    codes:
+      primary:   {label_de: Primär, label_en: Primary, colour: null}
+      secondary: {label_de: Sekundär, label_en: Secondary, colour: null}
+      cache:     {label_de: Cache, label_en: Cache, colour: null}
+      unknown:   {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  os_family:
+    order: [windows, rhel, sles, aix, other, unknown]
+    codes:
+      windows: {label_de: Windows, label_en: Windows, colour: null}
+      rhel:    {label_de: RHEL, label_en: RHEL, colour: null}
+      sles:    {label_de: SLES, label_en: SLES, colour: null}
+      aix:     {label_de: AIX, label_en: AIX, colour: null}
+      other:   {label_de: Sonstige, label_en: Other, colour: null}
+      unknown: {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  storage_class:
+    order: [block, file, object, unknown]
+    codes:
+      block:   {label_de: Block, label_en: Block, colour: null}
+      file:    {label_de: Datei, label_en: File, colour: null}
+      object:  {label_de: Objekt, label_en: Object, colour: null}
+      unknown: {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  deployment_model:
+    order: [bare_metal, vm, container, serverless, unknown]
+    codes:
+      bare_metal: {label_de: Bare Metal, label_en: Bare metal, colour: null}
+      vm:         {label_de: VM, label_en: VM, colour: null}
+      container:  {label_de: Container, label_en: Container, colour: null}
+      serverless: {label_de: Serverless, label_en: Serverless, colour: null}
+      unknown:    {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  # HANDOFF 2: no booleans anywhere in the data.
+  completeness_scale:
+    order: [full, partial, none, unknown]
+    codes:
+      full:    {label_de: Vollständig, label_en: Full, colour: null}
+      partial: {label_de: Teilweise, label_en: Partial, colour: null}
+      none:    {label_de: Keine, label_en: None, colour: null}
+      unknown: {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  tier:
+    order: [tier-1, tier-2, tier-3, unknown]
+    codes:
+      tier-1:  {label_de: null, label_en: null, colour: null}
+      tier-2:  {label_de: null, label_en: null, colour: null}
+      tier-3:  {label_de: null, label_en: null, colour: null}
+      unknown: {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  blocker_type:
+    order: [licensing, technical, vendor, budget, staffing, compliance, unknown]
+    codes:
+      licensing:  {label_de: Lizenzierung, label_en: Licensing, colour: null}
+      technical:  {label_de: Technisch, label_en: Technical, colour: null}
+      vendor:     {label_de: Hersteller, label_en: Vendor, colour: null}
+      budget:     {label_de: Budget, label_en: Budget, colour: null}
+      staffing:   {label_de: Personal, label_en: Staffing, colour: null}
+      compliance: {label_de: Compliance, label_en: Compliance, colour: null}
+      unknown:    {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  severity:
+    order: [low, medium, high, critical, unknown]
+    codes:
+      low:      {label_de: Niedrig, label_en: Low, colour: null}
+      medium:   {label_de: Mittel, label_en: Medium, colour: null}
+      high:     {label_de: Hoch, label_en: High, colour: null}
+      critical: {label_de: Kritisch, label_en: Critical, colour: null}
+      unknown:  {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  blocker_status:
+    order: [open, mitigated, closed, unknown]
+    codes:
+      open:      {label_de: Offen, label_en: Open, colour: null}
+      mitigated: {label_de: Entschärft, label_en: Mitigated, colour: null}
+      closed:    {label_de: Geschlossen, label_en: Closed, colour: null}
+      unknown:   {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}
+
+  # HANDOFF 3: everything an import produces is `imported` - nobody has looked at it.
+  confidence:
+    order: [verified, estimated, imported, unknown]
+    codes:
+      verified:  {label_de: Verifiziert, label_en: Verified, colour: null}
+      estimated: {label_de: Geschätzt, label_en: Estimated, colour: null}
+      imported:  {label_de: Importiert, label_en: Imported, colour: null}
+      unknown:   {label_de: Unbekannt, label_en: Unknown, colour: "#999999"}

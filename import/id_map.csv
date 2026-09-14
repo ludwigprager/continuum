@@ -1,0 +1,11 @@
+source_key,project_id
+P-1001,payment-gateway
+P-1002,legacy-crm
+P-1003,kundenportal
+P-1004,fakturierung
+P-1005,lagerverwaltung
+P-1006,vertragsverwaltung
+P-1007,dokumentenarchiv
+P-1008,schadenmeldung
+P-1009,tarifrechner
+P-1010,stammdaten

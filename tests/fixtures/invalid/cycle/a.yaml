@@ -1,0 +1,6 @@
+schema_version: 1
+id: alpha-service
+name: Alpha
+ownership: {team_id: team-alpha}
+integration:
+  depends_on: [beta-service]

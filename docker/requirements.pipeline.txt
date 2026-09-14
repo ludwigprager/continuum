@@ -1,0 +1,6 @@
+# M1 dependency set. Pinned exactly: reproducibility is a requirement (HANDOFF 9).
+# Renderer stack (matplotlib, python-pptx, duckdb, jinja2, openpyxl) is added in
+# M2-M5, not before, so the M1 image stays small and fast to rebuild.
+ruamel.yaml==0.19.1
+jsonschema==4.26.0
+pytest==8.4.2

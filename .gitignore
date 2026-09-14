@@ -1,0 +1,6 @@
+out/
+build/
+projekte.xlsx
+__pycache__/
+*.pyc
+.pytest_cache/

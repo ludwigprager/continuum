@@ -1,0 +1,44 @@
+# Several environments across several sites. This is what makes the
+# site x OS cross-tab a per-environment count rather than a per-project one.
+schema_version: 1
+id: fakturierung
+name: Fakturierung
+ownership:
+  team_id: team-gamma
+classification:
+  classification_a: CA-1
+  classification_b: CB-3
+  security_class: S4
+placement:
+  environments:
+    - name: prod
+      datacenter: muc-01
+      os: {family: aix, version: "7.2", eol: 2026-12-31}
+    - name: prod-dr
+      datacenter: fra-02
+      os: {family: aix, version: "7.2", eol: 2026-12-31}
+    - name: test
+      datacenter: vie-01
+      os: {family: rhel, version: "7.9"}
+platform:
+  cpu_cores: 24
+  storage_gb: 1200
+  storage_classes: [block]
+  deployment_model: bare_metal
+  containerised: none
+datastores:
+  - {engine: db2, version: "11.5", role: primary}
+migration:
+  strategy: refactor
+  status: planned
+  blockers:
+    - {id: BLK-021, type: vendor, severity: critical, status: open}
+    - {id: BLK-022, type: staffing, severity: medium, status: mitigated}
+integration:
+  depends_on: [customer-master]
+operations:
+  tier: tier-1
+  rto_hours: 2
+_meta:
+  confidence: estimated
+  last_reviewed: 2026-07-30

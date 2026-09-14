@@ -1,0 +1,6 @@
+# team_id that is not in schema/teams.yaml.
+schema_version: 1
+id: unknown-team
+name: Unknown team
+ownership:
+  team_id: team-omega
