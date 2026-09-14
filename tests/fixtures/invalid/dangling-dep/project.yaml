@@ -2,6 +2,7 @@
 # drops silently out of the dependency graph if nobody checks it.
 schema_version: 1
 id: dangling-dep
+my_mandatory_field: TODO
 name: Dangling dependency
 ownership: {team_id: team-alpha}
 integration:

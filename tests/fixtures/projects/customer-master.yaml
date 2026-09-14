@@ -1,6 +1,7 @@
 # Dependency target for several other fixtures.
 schema_version: 1
 id: customer-master
+my_mandatory_field: TODO
 name: Stammdaten
 ownership:
   team_id: team-alpha

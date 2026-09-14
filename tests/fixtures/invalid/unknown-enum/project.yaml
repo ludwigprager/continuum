@@ -1,6 +1,7 @@
 # M1 acceptance: an enum code that is not in taxonomy.yaml.
 schema_version: 1
 id: unknown-enum
+my_mandatory_field: TODO
 name: Unknown enum code
 ownership:
   team_id: team-alpha

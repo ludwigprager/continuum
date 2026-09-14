@@ -1,5 +1,8 @@
 # Team ids and contacts. Referenced via "x-ref": "teams".
-# Team id must match the directory name under projects/ (CODEOWNERS depends on it).
+#
+# The owning team is this id, recorded in ownership.team_id inside each project
+# file. projects/ is flat: there are no team directories, so there is no second
+# copy of the ownership that could disagree with this one.
 #
 # PROVISIONAL: seeded from the test fixtures.
 provisional: true

@@ -37,6 +37,26 @@ def codes(payload: dict) -> list[str]:
     return [f["code"] for f in payload["findings"]]
 
 
+# ruamel, not PyYAML: PyYAML is deliberately not in the pipeline image.
+def read_schema(schema_dir: Path) -> dict:
+    from ruamel.yaml import YAML
+    return YAML(typ="safe").load((schema_dir / "project.schema.yaml").read_text())
+
+
+def write_schema(schema_dir: Path, doc: dict) -> None:
+    import io
+    from ruamel.yaml import YAML
+    stream = io.StringIO()
+    YAML(typ="safe").dump(doc, stream)
+    (schema_dir / "project.schema.yaml").write_text(stream.getvalue())
+
+
+# Every project file needs the mandatory fields the schema declares; a test
+# that builds one by hand has to include them or it is testing the wrong thing.
+def project_yaml(body: str, pid: str = "p") -> str:
+    return f"schema_version: 1\nid: {pid}\nmy_mandatory_field: TODO\n{body}"
+
+
 def invalid_cases() -> list[str]:
     return sorted(d.name for d in INVALID_ROOT.iterdir()
                   if d.is_dir() and (d / "expect.txt").exists())
@@ -89,7 +109,7 @@ def test_error_message_format_matches_the_spec():
     """The exact shape from HANDOFF 6.1, not jsonschema's default wording."""
     proc = run("--projects", str(INVALID_ROOT / "unknown-enum"), "--schema", str(SCHEMA))
     out = proc.stdout
-    assert "unknown-enum/project.yaml:9:21" in out
+    assert "unknown-enum/project.yaml:10:21" in out
     assert "classification_b: 'CB-7' is not a known code" in out
     assert "valid: CB-1, CB-2, CB-3, CB-4" in out
     assert "schema/taxonomy.yaml" in out
@@ -156,7 +176,7 @@ def test_unknown_and_null_and_missing_all_count_as_not_answered(tmp_path):
         directory = tmp_path / name
         directory.mkdir()
         (directory / "p.yaml").write_text(
-            f"schema_version: 1\nid: p\nname: Same project\n{block}")
+            project_yaml(f"name: Same project\n{block}"))
         rc, payload = run_json("--projects", str(directory), *schema_args)
         assert rc == EXIT_OK, payload
         results[name] = payload["coverage"]["field_coverage_pct"]
@@ -165,12 +185,13 @@ def test_unknown_and_null_and_missing_all_count_as_not_answered(tmp_path):
     # And a file that answers nothing at all is 0%, not a validation failure.
     _, payload = run_json("--projects", str(VALID), *schema_args)
     by_id = {p["id"]: p for p in payload["coverage"]["by_project"]}
-    assert by_id["minimal-record"]["coverage_pct"] == 0.0, \
-        "id and schema_version alone answer nothing"
+    # minimal-record answers exactly one thing: the field the schema makes
+    # mandatory. Everything else is absent, and absent is not an answer.
+    assert by_id["minimal-record"]["fields_filled"] == 1
     # Both of these fill in `name` and one more field and nothing else: every
     # other key is present but set to null / unknown, and must not count.
-    assert by_id["lagerverwaltung"]["fields_filled"] == 2, "explicit nulls must not count"
-    assert by_id["legacy-crm"]["fields_filled"] == 2, "`unknown` must not count"
+    assert by_id["lagerverwaltung"]["fields_filled"] == 3, "explicit nulls must not count"
+    assert by_id["legacy-crm"]["fields_filled"] == 3, "`unknown` must not count"
 
 
 def test_raw_and_verified_coverage_are_separate_numbers():
@@ -217,9 +238,9 @@ def test_schema_self_test_catches_a_typo_in_an_annotation(tmp_path):
     silently validates nothing. It must be caught, not ignored."""
     schema_dir = tmp_path / "schema"
     shutil.copytree(SCHEMA, schema_dir)
-    doc = json.loads((schema_dir / "project.schema.json").read_text())
+    doc = read_schema(schema_dir)
     doc["properties"]["classification"]["properties"]["security_class"]["x-taxonmy"] = "oops"
-    (schema_dir / "project.schema.json").write_text(json.dumps(doc))
+    write_schema(schema_dir, doc)
 
     rc, payload = run_json("--schema", str(schema_dir), "--check-schema")
     assert rc == EXIT_INVALID
@@ -229,9 +250,9 @@ def test_schema_self_test_catches_a_typo_in_an_annotation(tmp_path):
 def test_schema_self_test_catches_a_taxonomy_group_that_does_not_exist(tmp_path):
     schema_dir = tmp_path / "schema"
     shutil.copytree(SCHEMA, schema_dir)
-    doc = json.loads((schema_dir / "project.schema.json").read_text())
+    doc = read_schema(schema_dir)
     doc["properties"]["classification"]["properties"]["security_class"]["x-taxonomy"] = "nope"
-    (schema_dir / "project.schema.json").write_text(json.dumps(doc))
+    write_schema(schema_dir, doc)
 
     rc, payload = run_json("--schema", str(schema_dir), "--check-schema")
     assert rc == EXIT_INVALID
@@ -266,10 +287,10 @@ def test_a_new_coded_field_needs_only_schema_and_taxonomy_edits(tmp_path):
     (schema_dir / "taxonomy.yaml").write_text(taxonomy)
 
     # 2. a field pointing at it
-    doc = json.loads((schema_dir / "project.schema.json").read_text())
+    doc = read_schema(schema_dir)
     doc["properties"]["operations"]["properties"]["backup_class"] = {
         "$ref": "#/$defs/code", "x-taxonomy": "backup_class", "x-tracked": True}
-    (schema_dir / "project.schema.json").write_text(json.dumps(doc, indent=2))
+    write_schema(schema_dir, doc)
 
     # 3. that is all. No code change.
     assert VALIDATE.read_bytes() == before
@@ -277,16 +298,16 @@ def test_a_new_coded_field_needs_only_schema_and_taxonomy_edits(tmp_path):
     assert run("--schema", str(schema_dir), "--check-schema").returncode == EXIT_OK
 
     (projects / "good.yaml").write_text(
-        "schema_version: 1\nid: good\noperations:\n  backup_class: gold\n")
+        project_yaml("operations:\n  backup_class: gold\n", "good"))
     rc, payload = run_json("--projects", str(projects), "--schema", str(schema_dir))
     assert rc == EXIT_OK, payload
 
     # the new field counts toward coverage...
-    assert payload["coverage"]["fields_tracked"] == 18
+    assert payload["coverage"]["fields_tracked"] == 20
 
     # ...and a bad code in it is rejected, with the new group named.
     (projects / "good.yaml").write_text(
-        "schema_version: 1\nid: good\noperations:\n  backup_class: platinum\n")
+        project_yaml("operations:\n  backup_class: platinum\n", "good"))
     rc, payload = run_json("--projects", str(projects), "--schema", str(schema_dir))
     assert rc == EXIT_INVALID
     finding = next(f for f in payload["findings"] if f["code"] == "ref.unknown-code")

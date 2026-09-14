@@ -3,6 +3,7 @@
 # unchanged files untouched, so `git status` shows only real changes
 schema_version: 1
 id: lagerverwaltung
+my_mandatory_field: TODO
 name: Lagerverwaltung
 classification:
   classification_a: CA-1

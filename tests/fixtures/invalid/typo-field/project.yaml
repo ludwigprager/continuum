@@ -2,6 +2,7 @@
 # additionalProperties: false. Without it this field vanishes without a word.
 schema_version: 1
 id: typo-field
+my_mandatory_field: TODO
 name: Typo in a field name
 classification:
   classification_a: CA-1

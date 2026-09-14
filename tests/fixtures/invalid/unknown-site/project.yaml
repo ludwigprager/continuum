@@ -1,6 +1,7 @@
 # datacenter that is not in schema/sites.yaml, in both placement shapes.
 schema_version: 1
 id: unknown-site
+my_mandatory_field: TODO
 name: Unknown site
 ownership: {team_id: team-alpha}
 placement:

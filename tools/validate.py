@@ -438,11 +438,21 @@ def structure_findings(doc: Any, rel: str, schema: Schema,
         if err.validator == "required":
             missing = re.findall(r"'([^']+)'", err.message)
             label = missing[0] if missing else "?"
+            if not path:
+                fix = (f"Every project file needs {label!r}. "
+                       "Everything else may be missing (HANDOFF 5.1).")
+            else:
+                # A nested `required` only applies because the parent block is
+                # present. Saying "every project file needs it" would be false
+                # and would send someone looking in the wrong place.
+                parent = path_str(path)
+                fix = (f"{parent}.{label} is required whenever {parent!r} is present.\n"
+                       f"  Either fill it in, or remove the whole {parent!r} block - "
+                       f"a project\n"
+                       f"  that has not been assessed yet is allowed to omit it entirely.")
             findings.append(Finding(
                 ERROR, "structure.missing-field",
-                f"missing required field {label!r}", rel, line, col,
-                fix=f"Every project file needs {label!r}. "
-                    "Everything else may be missing."))
+                f"missing required field {label!r}", rel, line, col, fix=fix))
             continue
 
         if err.validator in ("type", "anyOf", "const", "enum", "pattern", "minimum"):
@@ -714,11 +724,31 @@ def load_reference(path: Path) -> dict:
         return loader.load(handle) or {}
 
 
+SCHEMA_BASENAME = "project.schema"
+
+
+def schema_file_in(schema_dir: Path) -> Path:
+    """The project schema, as YAML by preference.
+
+    YAML because the people who maintain it hand-edit YAML all day (HANDOFF 2)
+    and because it takes comments: the recipe for adding a field lives at the
+    top of the file being edited. JSON is still accepted so an older checkout,
+    or `import_xlsx.py derive-schema` output, keeps working.
+    """
+    for suffix in (".yaml", ".yml", ".json"):
+        candidate = schema_dir / (SCHEMA_BASENAME + suffix)
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        f"{schema_dir / (SCHEMA_BASENAME + '.yaml')} not found")
+
+
 def load_schema_dir(schema_dir: Path) -> tuple[dict, dict, dict, dict]:
-    schema_file = schema_dir / "project.schema.json"
-    if not schema_file.exists():
-        raise FileNotFoundError(f"{schema_file} not found")
-    root = json.loads(schema_file.read_text(encoding="utf-8"))
+    schema_file = schema_file_in(schema_dir)
+    if schema_file.suffix == ".json":
+        root = json.loads(schema_file.read_text(encoding="utf-8"))
+    else:
+        root = load_reference(schema_file)
 
     taxonomy_file = schema_dir / "taxonomy.yaml"
     taxonomy_raw = load_reference(taxonomy_file) if taxonomy_file.exists() else {}
@@ -727,7 +757,8 @@ def load_schema_dir(schema_dir: Path) -> tuple[dict, dict, dict, dict]:
 
     references: dict[str, dict] = {}
     for candidate in sorted(schema_dir.glob("*.yaml")):
-        if candidate.name == "taxonomy.yaml":
+        if candidate.name == "taxonomy.yaml" or \
+                candidate.name.startswith(SCHEMA_BASENAME):
             continue
         data = load_reference(candidate)
         references[candidate.stem] = data
@@ -749,7 +780,7 @@ def check_schema(schema_dir: Path) -> list[Finding]:
     except Exception as exc:
         return [Finding(ERROR, "schema.unreadable", str(exc), str(schema_dir))]
 
-    rel_schema = str(schema_dir / "project.schema.json")
+    rel_schema = str(schema_file_in(schema_dir))
     try:
         Draft202012Validator.check_schema(root)
     except SchemaError as exc:
@@ -759,7 +790,8 @@ def check_schema(schema_dir: Path) -> list[Finding]:
 
     schema = Schema(root)
     known_sources = set(references) | {"projects"}
-    known_annotations = {"x-taxonomy", "x-ref", "x-tracked", "x-graph", "x-kind", "x-doc"}
+    known_annotations = {"x-taxonomy", "x-ref", "x-tracked", "x-graph", "x-kind",
+                         "x-column", "x-doc"}
 
     tracked = 0
     for pattern, annots in schema.walk_schema():
@@ -787,6 +819,14 @@ def check_schema(schema_dir: Path) -> list[Finding]:
                 fix=f"available: {joined(sorted(known_sources))}"))
         if annots.get("x-tracked"):
             tracked += 1
+        if annots.get("x-column") and "[]" in pattern:
+            findings.append(Finding(
+                ERROR, "schema.column-on-repeated-field",
+                f"{pattern}: x-column cannot go on a field inside a list",
+                rel_schema,
+                fix="The projects table has one row per project, so a repeated\n"
+                    "  field has no single value to put in the column. It belongs on\n"
+                    "  the datastores/environments table, at its own grain."))
 
     if tracked == 0:
         findings.append(Finding(

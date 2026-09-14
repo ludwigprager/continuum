@@ -1,6 +1,8 @@
 # Fully populated, hand-verified. The "everything present" case.
 schema_version: 1
 id: payment-gateway
+my_mandatory_field: TODO
+my_optional_field: demo value
 name: Payment Gateway
 ownership:
   team_id: team-alpha

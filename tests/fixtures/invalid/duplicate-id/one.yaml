@@ -1,4 +1,5 @@
 schema_version: 1
 id: same-id
+my_mandatory_field: TODO
 name: First file
 ownership: {team_id: team-alpha}

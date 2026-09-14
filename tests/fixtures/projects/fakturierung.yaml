@@ -2,6 +2,7 @@
 # site x OS cross-tab a per-environment count rather than a per-project one.
 schema_version: 1
 id: fakturierung
+my_mandatory_field: TODO
 name: Fakturierung
 ownership:
   team_id: team-gamma

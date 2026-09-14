@@ -3,6 +3,7 @@
 # and you never see it (HANDOFF 2).
 schema_version: 1
 id: legacy-crm
+my_mandatory_field: TODO
 name: Legacy CRM
 ownership:
   team_id: unknown

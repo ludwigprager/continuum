@@ -2,6 +2,7 @@
 # The error must name the ring, not just say that one exists.
 schema_version: 1
 id: gamma-service
+my_mandatory_field: TODO
 name: Gamma
 ownership: {team_id: team-gamma}
 integration:

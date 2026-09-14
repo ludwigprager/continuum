@@ -1,0 +1,272 @@
+# =========================================================================
+#  PROJECT SCHEMA - the shape of every file in projects/
+# =========================================================================
+#
+#  TO ADD A FIELD: copy a block from below into the right section, change the
+#  name, run  ./check.sh --check-schema
+#
+#      jira_ticket:
+#        $ref: '#/$defs/text'      # pick one, see the table
+#        x-tracked: true           # counts toward the coverage %
+#        x-column: true            # appears in the Excel sheet and the report
+#
+#  Pick the right $ref:
+#
+#      '#/$defs/text'      free text
+#      '#/$defs/code'      one of a fixed set of codes -> add x-taxonomy
+#      '#/$defs/count'     a whole number, or "unknown". Never 0 for missing.
+#      '#/$defs/date'      an ISO date (2026-09-14), or "unknown"
+#      '#/$defs/version'   a version number. Always a quoted string.
+#
+#  The annotations, all optional:
+#
+#      x-taxonomy: <group>   valid codes live in schema/taxonomy.yaml
+#      x-ref: sites|teams|projects   value must exist in that file
+#      x-tracked: true       counts toward the coverage percentage
+#      x-column: true        gets a column in the projects table, the report
+#                            and the Excel sheet. Use a string instead of
+#                            `true` to name the column: x-column: migration_status
+#      x-graph: <name>       values are graph edges, checked for cycles
+#
+#  EVERY FIELD IS OPTIONAL. Only id and schema_version are required, and that
+#  is deliberate: a team that cannot submit a half-filled file will keep its
+#  data in a private spreadsheet instead. To press for a field, mark it
+#  x-tracked so it shows up as a coverage gap - do not make it required.
+#
+#  Careful with `required:` inside a block - it only applies when the block is
+#  present, so deleting the whole block is a legal way around it.
+#
+#  Use snake_case. A name with a hyphen is legal YAML but becomes a subtraction
+#  in SQL.
+#
+#  After editing:  ./check.sh --check-schema   then   ./check.sh
+# =========================================================================
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://example.invalid/mig/project.schema.json
+title: Project record
+description: >-
+  One project. Everything except id and schema_version may be missing;
+  missing means unknown, never zero (HANDOFF 5.1).
+
+type: object
+required: [schema_version, id, my_mandatory_field]
+additionalProperties: false
+
+properties:
+
+  schema_version: {const: 1, x-kind: schema_version}
+
+  id:
+    type: string
+    pattern: '^[a-z0-9][a-z0-9-]*$'
+    x-kind: id
+
+  name:
+    $ref: '#/$defs/text'
+    x-tracked: true
+    x-column: true
+
+  # ---- WORKED EXAMPLES ---------------------------------------------------
+  # Two fields showing the two ways to ask for something. Copy whichever you
+  # need and delete these once you have your own.
+
+  # OPTIONAL - the normal case, and what you should almost always use.
+  # Missing, null and "unknown" all validate. x-tracked means an empty one
+  # lowers that team's coverage percentage, so it is visible without blocking
+  # anybody's merge request.
+  my_optional_field:
+    $ref: '#/$defs/text'
+    x-tracked: true
+    x-column: true
+
+  # MANDATORY - listed in `required:` at the top of this file, so a file
+  # without it fails validation and the commit is rejected.
+  #
+  # Think before adding one. Every existing project file must be edited before
+  # validation passes again, and a team that cannot fill it in has no way to
+  # submit anything at all - which is how data stops reaching you (HANDOFF 2).
+  # Note also that `required:` at the ROOT is the only unconditional kind:
+  # inside a block it only applies when that block is present.
+  my_mandatory_field:
+    $ref: '#/$defs/text'
+    x-tracked: true
+    x-column: true
+
+  ownership:
+    type: object
+    additionalProperties: false
+    properties:
+      team_id:
+        $ref: '#/$defs/code'
+        x-ref: teams
+        x-tracked: true
+        x-column: true
+      contact:
+        $ref: '#/$defs/text'
+
+  classification:
+    type: object
+    additionalProperties: false
+    properties:
+      classification_a:
+        {$ref: '#/$defs/code', x-taxonomy: classification_a, x-tracked: true, x-column: true}
+      classification_b:
+        {$ref: '#/$defs/code', x-taxonomy: classification_b, x-tracked: true, x-column: true}
+      security_class:
+        {$ref: '#/$defs/code', x-taxonomy: security_class, x-tracked: true, x-column: true}
+
+  placement:
+    type: object
+    additionalProperties: false
+    description: >-
+      Both shapes are accepted: a single `datacenter` scalar (v1 imported data)
+      and an `environments` list (target schema). HANDOFF 12.4 is still open;
+      snapshot.py normalises both into environment rows.
+    properties:
+      datacenter:
+        $ref: '#/$defs/code'
+        x-ref: sites
+        x-tracked: true
+      environments:
+        type: [array, "null"]
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            name: {$ref: '#/$defs/text'}
+            datacenter: {$ref: '#/$defs/code', x-ref: sites, x-tracked: true}
+            os:
+              type: object
+              additionalProperties: false
+              properties:
+                family: {$ref: '#/$defs/code', x-taxonomy: os_family, x-tracked: true}
+                version: {$ref: '#/$defs/version'}
+                eol: {$ref: '#/$defs/date'}
+
+  platform:
+    type: object
+    additionalProperties: false
+    properties:
+      cpu_cores:  {$ref: '#/$defs/count', x-tracked: true, x-column: true}
+      storage_gb: {$ref: '#/$defs/count', x-tracked: true, x-column: true}
+      storage_classes:
+        type: [array, "null"]
+        items: {$ref: '#/$defs/code', x-taxonomy: storage_class}
+        x-tracked: true
+        x-column: true
+      deployment_model:
+        {$ref: '#/$defs/code', x-taxonomy: deployment_model, x-tracked: true, x-column: true}
+      containerised:
+        {$ref: '#/$defs/code', x-taxonomy: completeness_scale, x-column: true}
+
+  datastores:
+    type: [array, "null"]
+    items:
+      type: object
+      additionalProperties: false
+      properties:
+        engine:  {$ref: '#/$defs/code', x-taxonomy: engine, x-tracked: true}
+        version: {$ref: '#/$defs/version'}
+        role:    {$ref: '#/$defs/code', x-taxonomy: datastore_role}
+
+  migration:
+    type: object
+    additionalProperties: false
+    properties:
+      strategy:
+        {$ref: '#/$defs/code', x-taxonomy: migration_strategy, x-tracked: true,
+         x-column: migration_strategy}
+      status:
+        {$ref: '#/$defs/code', x-taxonomy: migration_status, x-tracked: true,
+         x-column: migration_status}
+      target_date: {$ref: '#/$defs/date', x-column: true}
+      blockers:
+        type: [array, "null"]
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            id:       {$ref: '#/$defs/text'}
+            type:     {$ref: '#/$defs/code', x-taxonomy: blocker_type}
+            severity: {$ref: '#/$defs/code', x-taxonomy: severity}
+            status:   {$ref: '#/$defs/code', x-taxonomy: blocker_status}
+
+  integration:
+    type: object
+    additionalProperties: false
+    properties:
+      depends_on:
+        type: [array, "null"]
+        items: {$ref: '#/$defs/code', x-ref: projects}
+        x-graph: depends_on
+        x-tracked: true
+
+  operations:
+    type: object
+    additionalProperties: false
+    properties:
+      tier:      {$ref: '#/$defs/code', x-taxonomy: tier, x-tracked: true, x-column: true}
+      rto_hours: {$ref: '#/$defs/count', x-column: true}
+      rpo_hours: {$ref: '#/$defs/count', x-column: true}
+
+  _unmapped:
+    type: [object, "null"]
+    description: >-
+      Columns the importer could not map. Arbitrary content, exempt from all
+      structural rules (HANDOFF 3).
+
+  _meta:
+    type: object
+    additionalProperties: true
+    properties:
+      source:        {$ref: '#/$defs/text'}
+      source_sheet:  {$ref: '#/$defs/text'}
+      source_row:    {$ref: '#/$defs/count'}
+      source_sha256: {$ref: '#/$defs/text'}
+      imported_at:   {$ref: '#/$defs/date', x-column: true}
+      confidence:    {$ref: '#/$defs/code', x-taxonomy: confidence, x-column: true}
+      last_reviewed: {$ref: '#/$defs/date', x-column: true}
+      reviewed_by:   {$ref: '#/$defs/text'}
+
+# -------------------------------------------------------------------------
+# $defs - the building blocks. Pick one with $ref instead of writing types by
+# hand: each of these solves a YAML trap from HANDOFF 9 once, for everybody.
+# -------------------------------------------------------------------------
+$defs:
+
+  text:
+    type: [string, "null"]
+    x-kind: text
+
+  code:
+    type: [string, "null"]
+    description: >-
+      A code. Which codes are valid is decided by x-taxonomy / x-ref, never
+      here - so adding a code is a one-file change in taxonomy.yaml.
+    x-kind: code
+
+  version:
+    type: [string, "null"]
+    pattern: '^([0-9][0-9A-Za-z.+_~-]*|unknown)$'
+    description: >-
+      Always a quoted string. Unquoted 7.9 is a float and eventually prints as
+      7.9000000000000004; unquoted 2016 is an integer (HANDOFF 9).
+    x-kind: version
+
+  date:
+    type: [string, "null"]
+    pattern: '^([0-9]{4}-[0-9]{2}-[0-9]{2}|unknown)$'
+    description: >-
+      ISO date. A bare YAML date (2026-09-14) is accepted and normalised to a
+      string before validation.
+    x-kind: date
+
+  count:
+    anyOf:
+      - {type: integer, minimum: 0}
+      - {const: unknown}
+      - {type: "null"}
+    description: >-
+      A non-negative count, or "unknown". Never 0 for missing (HANDOFF 5.1).
+    x-kind: count

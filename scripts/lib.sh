@@ -10,7 +10,7 @@
 set -euo pipefail
 
 IMAGE_NAME="${IMAGE_NAME:-mig-pipeline}"
-IMAGE_TAG="${IMAGE_TAG:-0.1.0}"
+IMAGE_TAG="${IMAGE_TAG:-0.2.0}"
 IMAGE_REF="${IMAGE_REF:-${IMAGE_NAME}:${IMAGE_TAG}}"
 
 # Name of the optional warm container used by the pre-commit hook.

@@ -2,6 +2,7 @@
 # still open. This pair reaches management as "done" and is usually wrong.
 schema_version: 1
 id: tarifrechner
+my_mandatory_field: TODO
 name: Tarifrechner
 ownership:
   team_id: team-gamma

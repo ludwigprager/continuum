@@ -1,5 +1,6 @@
 schema_version: 1
 id: beta-service
+my_mandatory_field: TODO
 name: Beta
 ownership: {team_id: team-beta}
 integration:

@@ -1,8 +1,11 @@
 # HANDOFF: legacy-to-cloud-native project catalogue & reporting pipeline
 
-You are picking up a project mid-design. The data-import tool is written and
-tested. Your job is to build the rest: validation, the report pipeline, the five
-output renderers, and a working `docker compose` project that runs all of it.
+You are picking up a project mid-build.
+
+**Done: M1 (validation) and M2 (tables + report model).** `./check.sh` and
+`./report.sh` work end to end against `projects/` with no network access,
+under podman or docker. What remains is the five renderers (M3-M5), the
+import entry point, and the offline bundle (M6). See 10 for the state of each.
 
 Read this whole document before writing code. The **Contracts** and **Do not**
 sections are the parts that will cost the most to get wrong.
@@ -32,14 +35,22 @@ central group assesses all of them and reports status **daily** to management.
 
 | Decision | Reason |
 |---|---|
-| **Git is the system of record.** One YAML file per project, one file per team directory. | Versioning, blame, review and per-team ownership (CODEOWNERS) for free. Teams submit merge requests for their own files. |
+| **Git is the system of record.** One YAML file per project, flat in `projects/`. | Versioning, blame and review for free. Teams submit merge requests for their own files. The owning team is `ownership.team_id` inside the file, not the path: teams merge, split and get renamed throughout a migration, and a directory layout turns each of those into a repo reorg where the path and the field can disagree. See the note below on CODEOWNERS. |
 | **Teams hand-edit YAML.** No web UI in v1. | The schema is still moving; a form built now would drift within weeks. A UI is a client of Git, added later if a specific group is provably blocked. |
-| **A derived analytical layer is rebuilt on every run**, never hand-maintained. | DuckDB + Parquet snapshots. Git holds truth; Parquet holds the time series. |
+| **A derived analytical layer is rebuilt on every run**, never hand-maintained. | DuckDB over jsonl tables in `out/tables/`. Git holds truth and git is the history. **Revised:** this was originally Parquet snapshots holding a time series. There are no trend charts and none are wanted, which was Parquet's only justification here - at ~400 projects the catalogue is about a thousand rows, where columnar storage buys nothing measurable (330 KB/day against 388 KB for jsonl). jsonl is readable, diffable, and one concept fewer. Nothing is carried between runs. |
 | **One report model feeds all five renderers.** | Five renderers each querying the data independently produce five subtly different numbers. |
 | **Charts are rendered once as PNG** and embedded in PDF, PPTX and XLSX. | Same reason. |
 | **`unknown` is a legal value everywhere; incomplete never fails validation.** | If a team cannot commit a half-filled file they will keep the data in their own spreadsheet and you will never see it. |
 | **No booleans in the data.** Use `full` / `partial` / `none` / `unknown`. | A boolean cannot distinguish "false" from "nobody has asked yet", and `yes`/`no` are YAML 1.1 booleans (see Gotchas). |
 | **No computed scores stored in YAML.** Readiness scores, risk scores, counts are computed in the report builder. | They go stale the instant a field is edited. |
+
+**On CODEOWNERS.** GitLab and GitHub match ownership rules against *paths*,
+never against file contents, so a flat layout cannot express "team-beta owns
+its own projects" with a wildcard. If per-team review is to be enforced,
+generate `CODEOWNERS` from `ownership.team_id` - one exact path per project -
+and have CI fail when it is out of date. That keeps the YAML as the single
+source of truth instead of duplicating ownership into the directory tree,
+where the two can silently disagree.
 
 ## 3. What already exists
 
@@ -73,11 +84,14 @@ python import_xlsx.py derive-schema  projekte.xlsx --config import/ --out schema
 
 ```
 .
-├── projects/                    # system of record, one YAML per project
-│   ├── team-alpha/*.yaml
+├── projects/                    # system of record, one YAML per project, flat
+│   ├── payment-gateway.yaml
+│   ├── kundenportal.yaml
 │   └── _import_manifest.yaml
 ├── schema/
-│   ├── project.schema.json      # seeded by derive-schema, then hand-tightened
+│   ├── project.schema.yaml      # YAML, not JSON: it is hand-edited and takes
+│   │                            # comments. The recipe for adding a field is
+│   │                            # at the top of the file. (.json also loads.)
 │   ├── taxonomy.yaml            # enum codes -> labels (de/en), order, colour
 │   ├── sites.yaml               # datacenter codes
 │   └── teams.yaml               # team ids, contacts
@@ -87,7 +101,7 @@ python import_xlsx.py derive-schema  projekte.xlsx --config import/ --out schema
 ├── tools/
 │   ├── import_xlsx.py           # EXISTS
 │   ├── validate.py              # BUILD
-│   ├── snapshot.py              # BUILD - YAML -> jsonl -> DuckDB -> Parquet
+│   ├── snapshot.py              # BUILD - YAML -> jsonl tables
 │   ├── build_model.py           # BUILD - DuckDB -> report_model.json
 │   └── render/
 │       ├── charts.py            # BUILD - PNG, run first, others embed its output
@@ -104,13 +118,25 @@ python import_xlsx.py derive-schema  projekte.xlsx --config import/ --out schema
 │   ├── Dockerfile.pipeline
 │   └── Dockerfile.import
 ├── out/                         # gitignored
-│   ├── snapshots/<date>/*.parquet
+│   ├── tables/*.jsonl           # rebuilt every run, nothing carried over
 │   └── reports/<date>/{report.xlsx,report.pdf,deck.pptx,*.png,report.txt,report_model.json,manifest.json}
 ├── tests/
 │   ├── fixtures/projects/       # ~12 hand-written YAML files covering edge cases
+│   ├── fixtures/invalid/<case>/ # one directory per failure mode, each with an
+│   │                            # expect.txt naming the finding codes it must
+│   │                            # report. A new case is a directory, not code.
 │   └── test_*.py
+├── check.sh                     # entry points, one per job
+├── import.sh
+├── snapshot.sh
+├── report.sh
+├── verify.sh
+├── shell.sh
+├── scripts/
+│   ├── lib.sh                   # container plumbing, the only place that
+│   │                            # knows about podman/docker
+│   └── precommit.sh
 ├── docker-compose.yml
-├── Makefile
 └── README.md
 ```
 
@@ -190,8 +216,7 @@ out, they do not compute.
   },
   "headline": [                          // the numbers on slide 2 / the txt summary
     { "key": "projects_total",   "label_de": "Projekte gesamt", "label_en": "Projects", "value": 412 },
-    { "key": "migrated",         "label_de": "Migriert",        "label_en": "Migrated", "value": 47,
-      "delta_vs_previous": 3 }
+    { "key": "migrated",         "label_de": "Migriert",        "label_en": "Migrated", "value": 47 }
   ],
   "tables": {
     "by_engine": {
@@ -234,8 +259,10 @@ Rules:
 
 ```
 tools/validate.py     [--projects DIR] [--schema DIR] [--format text|json] [--strict]
-tools/snapshot.py     --projects DIR --out out/snapshots/<date>/
-tools/build_model.py  --snapshot DIR --spec reports/daily.yaml --out out/reports/<date>/report_model.json
+tools/snapshot.py     [--projects DIR] [--schema DIR] [--out out/tables/] [--as-of DATE]
+tools/build_model.py  [--snapshot out/tables/] [--spec reports/daily.yaml] [--schema DIR]
+                      --out out/reports/<date>/report_model.json [--as-of DATE]
+                      [--generated-at ISO]
 tools/render/*.py     --model MODEL.json --out DIR [--lang de|en]
 ```
 
@@ -252,15 +279,19 @@ Syntax checking alone is too weak. Build all five.
    column for every node, and it rejects duplicate keys. PyYAML silently keeps
    the last one, so a file with two `storage:` blocks would be quietly wrong
    forever.
-2. **Structure.** JSON Schema (`jsonschema`, draft 2020-12). `additionalProperties:
-   false` so a typo like `secrutiy_class` fails instead of vanishing. `_unmapped`
-   is exempt.
+2. **Structure.** JSON Schema (`jsonschema`, draft 2020-12), written as YAML.
+   `additionalProperties: false` at **every** level, not just the root, so a
+   typo like `classification.secrutiy_class` fails instead of vanishing.
+   `_unmapped` is exempt.
 3. **Referential integrity.** This is where the real bugs are.
    - `ownership.team_id` resolves against `teams.yaml`
    - `datacenter` resolves against `sites.yaml`
    - every enum code exists in `taxonomy.yaml`
    - every `integration.depends_on` entry names a project that exists
    - the dependency graph has no cycles (report the cycle, not just its existence)
+
+   Drive all of this from annotations in the schema, never from field names in
+   the code. See 6.1.1.
 4. **Plausibility (warnings, not errors).** `deployment_model: container` with
    `containerised: none`; a tier-1 project with `rto_hours: 168`; a declared
    storage class with size 0; no `prod` environment; `migration.status: migrated`
@@ -272,39 +303,96 @@ Syntax checking alone is too weak. Build all five.
 highest-leverage piece of the whole validator:
 
 ```
-projects/team-alpha/payment-gateway.yaml:14:22
+projects/payment-gateway.yaml:14:22
   classification_b: 'CB-7' is not a known code
   valid: CB-1, CB-2, CB-3, CB-4  (see schema/taxonomy.yaml)
 ```
 
 Not `ValidationError: 'CB-7' is not one of [...]`.
 
-One code path, three call sites: `make check` locally, a pre-commit hook, and CI.
+One code path, three call sites: `./check.sh` locally, a pre-commit hook, and CI.
+
+### 6.1.1 The schema drives everything — no field names in code
+
+The set of collected fields is a moving target (1). If adding a field means
+editing Python, it will not happen at the rate the assessment needs, and the
+people who must do it are the ones least able to. So `validate.py`,
+`snapshot.py` and `build_model.py` contain **no field names, no codes and no
+enum values**. Everything is declared in `schema/project.schema.yaml`:
+
+| annotation | effect |
+|---|---|
+| `x-taxonomy: <group>` | value must be a code in that `taxonomy.yaml` group |
+| `x-ref: sites \| teams \| projects` | value must exist in that reference file |
+| `x-tracked: true` | counts toward the coverage percentage |
+| `x-column: true` | gets a column in the projects table, the model and the Excel sheet. A string names the column: `x-column: migration_status` |
+| `x-graph: <name>` | values are edges of a graph that must stay acyclic |
+| `x-kind: <kind>` | wording of the error message. Set on the `$defs`, not on fields |
+
+**Adding a field is one edit to one file.** `x-column` must not appear on a
+field inside a list: the projects table has one row per project, so a repeated
+field has no single value to put in a column — it belongs on the
+`datastores`/`environments` table at its own grain.
+
+The `$defs` exist so the YAML traps in 9 are solved once for everybody:
+`text`, `code`, `count` (never 0 for missing), `date`, `version` (always a
+quoted string). Point a field at a `$def` rather than writing types by hand.
+
+**`--check-schema` is not optional.** A misspelled annotation (`x-taxonmy`) is
+ignored, and the field is then validated less than the author thinks —
+silently. That is the worst failure mode this design has, so it gets its own
+check: the schema is validated against the meta-schema, every `x-taxonomy`
+must name a real group, every `x-ref` a real file, and every taxonomy code
+must appear in its group's `order`. Run it in CI.
+
+### 6.1.2 Optional is the default; think before making anything mandatory
+
+Only `id` and `schema_version` are required, and that is the decision in 2:
+incomplete never fails validation. The question is never how to make a field
+optional but how hard to press for it:
+
+| level | how | if the value is missing |
+|---|---|---|
+| silent | just add the field | nothing happens |
+| **tracked** — use this | `x-tracked: true` | lowers that team's coverage %. Visible, never blocking. |
+| warned | a rule in the plausibility layer | a warning, still exit 0 |
+| mandatory | add the name to `required:` at the root | error, exit 1 |
+
+A mandatory field means every existing project file must be edited before
+validation passes again. And `required:` **inside a block** only applies when
+that block is present, so deleting the block is a legal way around it — only
+`required:` at the root of the file is unconditional.
 
 ### 6.2 `snapshot.py`
 
 Walk `projects/**/*.yaml` (skip files starting with `_`), flatten into the five
-tables listed under `flat` in the model, write `build/tables/*.jsonl`, then let
-DuckDB read them with `read_json_auto` and write Parquet to
-`out/snapshots/<date>/`.
+tables listed under `flat` in the model, and write `out/tables/*.jsonl`. DuckDB
+reads them directly.
 
-Why jsonl in between: DuckDB cannot read YAML, and this keeps pandas out of the
-image. Each table is one row per (project, child) pair — this is what makes
-"how many projects have DB2" a `COUNT(DISTINCT project_id)` rather than a row
-count that double-counts.
+Why jsonl: DuckDB cannot read YAML, and this keeps pandas out of the image.
+Each table is one row per (project, child) pair — this is what makes "how many
+projects have DB2" a `COUNT(DISTINCT project_id)` rather than a row count that
+double-counts.
 
-Also write `out/snapshots/<date>/manifest.json`: git sha, git tag, schema version,
-file count, pipeline version.
+Declare the column types rather than letting `read_json_auto` infer them. A
+column that is null in every row today would otherwise get a different type
+tomorrow, and an empty table would lose its columns entirely — a jsonl file,
+unlike Parquet, does not carry its own schema. `snapshot.py` and
+`build_model.py` share one declaration so they cannot disagree.
+
+Nothing is carried over from the previous run. The tables are a pure function
+of the working tree: delete `out/` and the next run rebuilds it identically.
+Git is the history.
+
+Also write `out/tables/manifest.json`: git sha, git tag, schema version, file
+count, pipeline version.
 
 ### 6.3 `build_model.py`
 
-DuckDB SQL over the Parquet snapshot, driven by `reports/daily.yaml` so that
+DuckDB SQL over the jsonl tables, driven by `reports/daily.yaml` so that
 adding a newly-collected field to the deck is a config change, not a code change.
 A field named in the spec but absent from the data renders `n/a`; it must not
 crash the run.
-
-Compute `delta_vs_previous` by reading yesterday's snapshot if it exists. Absent
-is fine — omit the delta, do not write 0.
 
 ### 6.4 Renderers
 
@@ -356,19 +444,44 @@ filenames from the chart `key`.
 cleanly day over day, which turns out to be the fastest way to answer "what
 changed since yesterday".
 
-### 6.5 `Makefile`
+### 6.5 Entry points
+
+Bash scripts, not a Makefile. One script per job, at the repository root so
+that `ls` shows you what can be run:
 
 ```
-make import      # profile + convert from the legacy sheet
-make check       # validate.py, exits non-zero on invalid data
-make snapshot    # parquet
-make report      # full pipeline -> out/reports/<date>/
-make verify      # tests + a --network=none pipeline run against tests/fixtures
-make shell       # interactive shell in the pipeline image
+./import.sh      # profile + convert from the legacy sheet
+./check.sh       # validate.py, exits non-zero on invalid data
+./snapshot.sh    # flatten projects/ into out/tables/*.jsonl
+./report.sh      # full pipeline -> out/reports/<date>/
+./verify.sh      # tests + a --network=none pipeline run against tests/fixtures
+./shell.sh       # interactive shell in the pipeline image
 ```
 
-Every target runs in a container. `make report` must work on a clean checkout
-with only Docker installed.
+Each script is a few lines: source `scripts/lib.sh`, call `run_in_container`.
+**All container knowledge lives in `scripts/lib.sh`** — engine detection, mount
+flags, `--network=none`, user mapping, exit-code translation. When something
+about the runtime changes it changes there and nowhere else.
+
+`scripts/lib.sh` must:
+
+- Prefer **podman**, fall back to docker, and honour `$CONTAINER_ENGINE`.
+  Podman's semantics are the baseline: `--userns=keep-id` for rootless uid
+  mapping (docker gets `--user`), and `:z` on every bind mount so SELinux
+  hosts do not fail with permission denied.
+- **Propagate the exit code verbatim**, except 125-127, which mean the runtime
+  itself failed rather than the data. Those become 2. CI must never read
+  "the image failed to start" as "the data is fine".
+- Build the image on first use, so a clean checkout needs nothing but the
+  container engine.
+
+Every target runs in a container. `./report.sh` must work on a clean checkout
+with only podman (or docker) installed.
+
+The pipeline does **not** shell out to `docker compose`: `podman compose` in
+4.x delegates to whichever compose implementation happens to be installed, and
+that is not something to put underneath a pre-commit hook. The scripts call
+`podman run` / `docker run` directly. See §8.3 for what compose is still for.
 
 ## 7. Counting rules — settle this before writing SQL
 
@@ -384,12 +497,23 @@ Starting set:
 
 ```yaml
 projects_with_engine:
+  grain: datastores        # which table the rows come from
+  count: projects          # COUNT(DISTINCT project_id), never double counted
   text_de: "Projekte mit mindestens einem Datastore mit engine=X, alle Umgebungen."
-  sql: "COUNT(DISTINCT project_id) FROM datastores WHERE engine = ?"
-projects_by_status: { ... }          # one row per project, never double counted
-projects_at_site_with_os:            # per ENVIRONMENT, not per project:
+  text_en: "Projects having at least one datastore with engine=X."
+projects_by_status:
+  grain: projects
+  count: projects          # one row per project
+environments_by_site_and_os:
+  grain: environments
+  count: rows              # per ENVIRONMENT, not per project
   text_de: "Umgebungen an Standort X mit OS-Familie Y. Ein Projekt kann an mehreren Standorten zählen."
 ```
+
+A rule declares its **grain** and what a number **counts**; `build_model.py`
+composes the SQL from those two in one place. Deliberately not a raw `sql:`
+string per rule: that is a second language for a junior to get wrong and an
+injection path into the query builder, and the shapes actually needed are few.
 
 **Decide how `unknown` is counted, and show it.** If 40% of projects have not
 declared an OS, "how many run Windows" has a denominator problem. The honest
@@ -403,7 +527,12 @@ first months when it will be embarrassing and therefore useful.
 Two, both built outside the air gap and carried in.
 
 **`Dockerfile.pipeline`** — `python:3.12-slim-bookworm` base.
-- pip: `ruamel.yaml jsonschema duckdb openpyxl python-pptx matplotlib jinja2 pyyaml`
+- pip, pinned exactly, installed at build time: `ruamel.yaml jsonschema duckdb
+  pytest`, plus `openpyxl python-pptx matplotlib jinja2` as M3-M5 need them.
+  **Not PyYAML** — `ruamel.yaml` is the only YAML library, so there is one
+  parser with one set of behaviours rather than two that disagree about
+  duplicate keys.
+- `shellcheck` (apt): the entry points are shell and juniors maintain them.
 - Typst: download the release tarball in a builder stage from
   `github.com/typst/typst/releases`, copy the single binary into the final image.
   Pin the version and record it. Check what is current; do not assume.
@@ -437,7 +566,10 @@ Build this job early, not last.
 
 ### 8.3 `docker-compose.yml`
 
-Services are one-shot jobs invoked by the Makefile, not long-running daemons.
+Compose is **not** on the path of the daily pipeline — the bash entry points
+in §6.5 call the container engine directly. It is kept for the services that
+genuinely are long-lived, and as a convenience for people who prefer it.
+Services are one-shot jobs, not daemons.
 
 ```yaml
 services:
@@ -461,7 +593,7 @@ services:
 
 ### 8.4 Scheduling
 
-Default to `docker compose run --rm report` driven by a GitLab CI schedule — the
+Default to `./report.sh` driven by a GitLab CI schedule — the
 runner already exists and it is the smallest thing that works. The `scheduler`
 compose profile is the fallback for environments with no CI. Do not reach for
 Airflow. Argo Workflows becomes worth it only when collectors fan out per team,
@@ -494,14 +626,15 @@ These were found the hard way while building the importer. Do not rediscover the
 
 Build in this order. Each milestone must be demonstrably working before the next.
 
-**M1 — Validation runs in a container.**
-`make check` against `tests/fixtures/` exits 0 on valid files and 1 on a
+**M1 — Validation runs in a container. DONE.**
+`./check.sh` against `tests/fixtures/` exits 0 on valid files and 1 on a
 deliberately broken one, printing file:line:fix. Includes a fixture with a
 dependency cycle and one with an unknown enum code.
 
-**M2 — Snapshot and model.**
-`make snapshot && make report` produces `report_model.json`. Running it twice on
-identical input produces byte-identical output. Assert this in a test.
+**M2 — Tables and model. DONE.**
+`./snapshot.sh && ./report.sh` produces `report_model.json`. Running it twice on
+identical input produces byte-identical output. Asserted in a test, and in
+`./verify.sh` on every run.
 
 **M3 — Excel first.** It is the output that gets used.
 Acceptance: open it, build a pivot of site × OS family from the `environments`
@@ -511,12 +644,20 @@ sheet without touching the data, and have the numbers match the `counts` sheet.
 
 **M5 — PDF and PPTX.**
 
+**Not yet started, and not a milestone of its own:** `import.sh`. The importer
+exists and is tested but has no container — `Dockerfile.import` is unwritten,
+so `import_xlsx.py` cannot currently be run the way everything else is. It also
+auto-detects a grouping column and would recreate per-team directories under
+`projects/`, which is no longer the layout (see 2); `--group-column ""` does not
+suppress that, so the tool needs a way to say "no grouping".
+
 **M6 — `--network=none` CI job passing**, and the offline bundle documented:
 images as OCI archives pinned by digest, the repo as a `git bundle` so history
 comes along, schema, taxonomy, fonts, and a manifest with checksums.
 
-**Definition of done for the whole thing:** on a machine with only Docker and the
-bundle, `make report` produces all five formats in `out/reports/<date>/` with no
+**Definition of done for the whole thing:** on a machine with only a container
+engine and the bundle, `./report.sh` produces all five formats in
+`out/reports/<date>/` with no
 network access, and `out/reports/<date>/manifest.json` records the git sha,
 schema version and image digest that produced them.
 
@@ -539,16 +680,24 @@ schema version and image digest that produced them.
 
 Ask before guessing on these; each one changes the shape of the code.
 
-1. **Taxonomy semantics.** CA-1..3, CB-1..4 and S1..S4 are opaque outside the room
-   they were invented in. `taxonomy.yaml` needs real labels and a sort order
-   before the deck means anything. This is the top blocker for M5.
+1. **Taxonomy semantics. STILL OPEN — top blocker for M5.** CA-1..3, CB-1..4,
+   S1..S4 and the tier codes are opaque outside the room they were invented in.
+   `taxonomy.yaml` carries `label_de: null` for each rather than invented words,
+   and `--check-schema` warns about every one until they are filled in. Charts
+   would otherwise be labelled with bare codes.
 2. **Corporate PowerPoint template.** Needed as `.potx` for M5. Until it arrives,
    the placeholder mapping stays in one dict.
 3. **Report scoping.** One deck for everyone, or a per-team deck as well? Affects
    whether `build_model.py` runs once or once per team.
-4. **`placement`: single datacenter or multiple environments?** The imported data
-   has one site per project. The target schema has a list of environments. Decide
-   when to migrate, because the `environments` sheet and the site × OS cross-tab
-   depend on it.
-5. **Retention.** How many daily snapshots are kept before rolling up? Affects
-   whether the Parquet layer needs partitioning.
+4. **`placement`: single datacenter or multiple environments? STILL OPEN, but
+   no longer blocking.** Both shapes validate, and `snapshot.py` normalises
+   them into environment rows — a flat `datacenter` scalar becomes one
+   environment with no name, because the legacy sheet has nothing to derive a
+   name from. A file using both at once gets a plausibility warning. This is
+   recorded in `definitions.yaml` because it changes reported numbers: the
+   site × OS cross-tab counts environments, so the choice affects the totals.
+5. ~~**Retention.** How many daily snapshots are kept before rolling up?~~
+   **Answered:** none. There is no snapshot history, no trend reporting and
+   no day-over-day comparison. `out/tables/` is the current run and nothing
+   else is kept. Reports under `out/reports/<date>/` are the deliverable and
+   are not pruned.

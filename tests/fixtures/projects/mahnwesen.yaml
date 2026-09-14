@@ -5,6 +5,7 @@
 # All quoted here. tests/fixtures/invalid/float-version/ has the failing form.
 schema_version: 1
 id: mahnwesen
+my_mandatory_field: TODO
 name: Mahnwesen
 ownership:
   team_id: team-delta

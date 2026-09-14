@@ -1,6 +1,12 @@
-# M1 dependency set. Pinned exactly: reproducibility is a requirement (HANDOFF 9).
-# Renderer stack (matplotlib, python-pptx, duckdb, jinja2, openpyxl) is added in
-# M2-M5, not before, so the M1 image stays small and fast to rebuild.
+# Pinned exactly: reproducibility is a requirement (HANDOFF 9).
+# The renderer stack (matplotlib, python-pptx, jinja2, openpyxl) arrives with
+# M3-M5, not before.
+#
+# duckdb: `json` and `parquet` are statically linked into the Python wheel and
+# need no download. The optional extensions (httpfs, excel, spatial) DO reach
+# for the network on first use, so snapshot.py and build_model.py disable
+# autoinstall/autoload outright rather than relying on never touching them.
 ruamel.yaml==0.19.1
 jsonschema==4.26.0
+duckdb==1.5.5
 pytest==8.4.2

@@ -1,5 +1,6 @@
 # Same id as one.yaml. Every reference to `same-id` is now ambiguous.
 schema_version: 1
 id: same-id
+my_mandatory_field: TODO
 name: Second file
 ownership: {team_id: team-beta}

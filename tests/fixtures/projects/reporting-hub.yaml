@@ -2,6 +2,7 @@
 # `environments` list. Both are accepted while HANDOFF 12.4 is open.
 schema_version: 1
 id: reporting-hub
+my_mandatory_field: TODO
 name: Reporting Hub
 ownership:
   team_id: team-beta

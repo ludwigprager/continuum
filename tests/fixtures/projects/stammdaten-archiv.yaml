@@ -2,6 +2,7 @@
 # and must not be mistaken for missing data.
 schema_version: 1
 id: stammdaten-archiv
+my_mandatory_field: TODO
 name: Stammdaten-Archiv (Altbestand)
 ownership:
   team_id: team-delta

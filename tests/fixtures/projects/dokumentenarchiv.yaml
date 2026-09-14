@@ -2,6 +2,7 @@
 # production or an environment is missing from the file.
 schema_version: 1
 id: dokumentenarchiv
+my_mandatory_field: TODO
 name: Dokumentenarchiv
 ownership:
   team_id: team-delta

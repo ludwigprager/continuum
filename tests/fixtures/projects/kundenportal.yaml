@@ -2,6 +2,7 @@
 # _unmapped holds arbitrary content and is exempt from structural validation.
 schema_version: 1
 id: kundenportal
+my_mandatory_field: TODO
 name: Kundenportal Süd (Außenstellen)
 ownership:
   team_id: team-beta

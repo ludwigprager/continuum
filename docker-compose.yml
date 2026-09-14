@@ -14,7 +14,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.pipeline
-    image: mig-pipeline:0.1.0
+    image: mig-pipeline:0.2.0
     # Not paranoia: the cheapest possible regression test for the air-gap
     # traps in HANDOFF 8.2.
     network_mode: none
@@ -26,7 +26,7 @@ services:
     command: ["python3", "tools/validate.py", "--projects", "projects", "--schema", "schema"]
 
   shell:
-    image: mig-pipeline:0.1.0
+    image: mig-pipeline:0.2.0
     network_mode: none
     volumes:
       - .:/work:z
@@ -38,7 +38,7 @@ services:
   # Warm container for the pre-commit hook. `docker compose up -d dev`, then
   # USE_WARM_CONTAINER=1. Purely a latency optimisation; nothing requires it.
   dev:
-    image: mig-pipeline:0.1.0
+    image: mig-pipeline:0.2.0
     container_name: mig-dev
     network_mode: none
     volumes:

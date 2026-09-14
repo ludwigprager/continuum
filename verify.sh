@@ -18,6 +18,25 @@ run_in_container -- python3 tools/validate.py --schema schema --check-schema || 
 step "pytest"
 run_in_container -- python3 -m pytest tests -q -p no:cacheprovider || fail=1
 
+step "full pipeline against fixtures, --network=none"
+# HANDOFF 8.2: the cheapest regression test for the air-gap traps is running
+# the whole thing with no network at all. This is that job, run locally.
+PIN="2026-09-14T04:00:00+02:00"
+if "$REPO_ROOT/report.sh" --projects tests/fixtures/projects --date fixtures \
+        --generated-at "$PIN" >/dev/null 2>&1; then
+    a=$(sha256sum "$REPO_ROOT/out/reports/fixtures/report_model.json" | cut -d' ' -f1)
+    "$REPO_ROOT/report.sh" --projects tests/fixtures/projects --date fixtures \
+        --generated-at "$PIN" >/dev/null 2>&1
+    b=$(sha256sum "$REPO_ROOT/out/reports/fixtures/report_model.json" | cut -d' ' -f1)
+    if [ "$a" = "$b" ]; then
+        printf '  ok   report_model.json byte-identical across runs (%s)\n' "${a:0:16}"
+    else
+        printf '  FAIL report_model.json differs between runs\n'; fail=1
+    fi
+else
+    printf '  FAIL pipeline did not complete\n'; fail=1
+fi
+
 step "exit-code contract, under every engine"
 # These run on the host, not in the container: they are testing the wrapper.
 # The same command under both engines must agree, or the handover breaks the

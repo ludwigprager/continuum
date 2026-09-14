@@ -2,6 +2,7 @@
 # quietly wrong forever; ruamel rejects it. This is why layer 1 exists.
 schema_version: 1
 id: duplicate-keys
+my_mandatory_field: TODO
 name: Duplicate keys
 platform:
   cpu_cores: 8

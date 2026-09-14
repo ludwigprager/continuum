@@ -1,12 +1,12 @@
 # Migration catalogue
 
-Git is the system of record: one YAML file per project under `projects/<team>/`.
+Git is the system of record: one YAML file per project, flat in `projects/`.
 Everything derived — snapshots, the report model, the five output formats — is
 rebuilt from those files and never hand-maintained.
 
 `HANDOFF.md` is the design document. This README is the operating manual.
 
-**Status: M1 (validation) complete.** M2–M6 are not built yet.
+**Status: M1 (validation) and M2 (snapshot + model) complete.** M3–M6 are not built yet.
 
 ## Requirements
 
@@ -20,6 +20,8 @@ Every tool runs in a container.
 ./check.sh tests/fixtures/projects  # validate the fixtures
 ./check.sh --check-schema           # validate the schema and reference files
 ./check.sh                          # validate projects/ - see below
+./snapshot.sh                       # projects/ -> out/tables/*.jsonl
+./report.sh                         # snapshot + model -> out/reports/<date>/
 ./shell.sh                          # interactive shell in the pipeline image
 ```
 
@@ -56,48 +58,186 @@ podman run -d --name mig-dev --network=none -v "$PWD:/work:z" \
     -w /work mig-pipeline:0.1.0 sleep infinity
 ```
 
+## The pipeline
+
+```
+projects/**/*.yaml
+      |  snapshot.py        five tables, one row per (project, child)
+      v
+out/tables/*.jsonl  ->  DuckDB  ->  out/reports/<date>/report_model.json
+                                       |  renderers (M3-M5)  lay out; never compute
+                                       v
+                       report.xlsx  report.pdf  deck.pptx  *.png  report.txt
+```
+
+`report_model.json` is the only thing renderers read. If a renderer needs a
+number that is not in the model, the number goes in the model (HANDOFF 11).
+
+### Reproducibility
+
+The model is byte-identical for identical input. Everything in
+`build_model.py` exists to keep that true: every list is sorted, percentages
+have one fixed format, and the only clock reading in the program is
+`generated_at`. Pin it to compare two runs:
+
+```bash
+./report.sh --generated-at 2026-09-14T04:00:00+02:00
+```
+
+`verify.sh` asserts this on every run, and `tests/test_pipeline.py` asserts
+both that the model is byte-identical and that two unpinned runs differ in
+`generated_at` and nothing else. The jsonl tables are byte-identical too, so
+the day-over-day delta compares data rather than noise.
+
+### There is no history, and no state between runs
+
+`out/tables/` is the current run, and that is all there is. Nothing is carried
+between runs, nothing accumulates, and there is no day-over-day comparison:
+the tables are a pure function of the working tree, so deleting `out/` and
+rebuilding gives byte-identical results.
+
+Git is the history. To reproduce an old report, check out that commit and run
+the pipeline.
+
+This replaced dated Parquet snapshots. At ~400 projects the catalogue is about
+a thousand rows across all five tables — 330 KB/day as Parquet against 388 KB
+as jsonl — so columnar storage bought nothing measurable, and its one real
+advantage here, a queryable time series, is not wanted. The trade is that a
+jsonl file does not carry its own schema, so the column types are declared in
+`snapshot.py` and shared with `build_model.py` via `table_schemas()`.
+
+### Counting rules
+
+"How many projects have DB2" has at least three defensible answers, so every
+rule lives in `reports/definitions.yaml`, is applied in exactly one place
+(`query_definition` in `build_model.py`), and is named by every table that
+used it. The definitions are emitted into the model so they can be printed
+next to the numbers.
+
+Each rule declares a **grain** (which table the rows come from) and what a
+number **counts**:
+
+| counts | SQL | means |
+|---|---|---|
+| `projects` | `COUNT(DISTINCT project_id)` | a project with two DB2 instances counts once |
+| `rows` | `COUNT(*)` | one per row at that grain — environments, blockers, edges |
+
+So `by_engine` counts projects and its column sums to *more* than the project
+total (a project with two engines is in both rows); `site_x_os` counts
+environments and its grand total is the environment count. Both are correct;
+the model says which is which, in `counts`.
+
+### How `unknown` is counted
+
+`unknown` is an explicit row in every distribution and is never dropped
+(HANDOFF 11). Two rules make that true:
+
+1. A missing or null coded value is flattened to the string `unknown` — not
+   NULL, not absent. Numbers stay NULL, because `0` is a real answer.
+2. A project with no `datastores:` block at all still gets one datastores row,
+   flagged `is_placeholder`. Without it the engine distribution would quietly
+   have a smaller denominator than the project count, and two slides would
+   disagree.
+
+Taxonomy-backed axes show every code, including ones at zero, so a chart's
+axis is stable day to day. `unknown` always sorts last.
+
+### Adding a table to the report
+
+Config, not code. In `reports/daily.yaml`:
+
+```yaml
+  by_tier:
+    kind: distribution        # or cross_tab
+    definition: projects_by_classification   # from definitions.yaml
+    column: tier
+    taxonomy: tier            # or: reference: sites | teams
+    title_de: "Projekte je Tier"
+    title_en: "Projects by tier"
+```
+
+A column named here that is absent from the data renders `n/a`
+(`"available": false` plus a note) rather than crashing — `by_backup_class` in
+`daily.yaml` is a permanent test of that path.
+
 ## Adding or changing a field
 
-This is the common task and it is deliberately a **configuration change, not a
-code change**. `tools/validate.py` contains no field names, no codes and no
-enum values; it is driven by annotations in `schema/project.schema.json`:
+This is the common task and it is deliberately **one file**:
+`schema/project.schema.yaml`. That file carries the recipe at the top, so the
+instructions are in front of whoever is editing it.
 
-| annotation | effect |
-|---|---|
-| `"x-taxonomy": "<group>"` | value must be a code in that `taxonomy.yaml` group |
-| `"x-ref": "sites"` \| `"teams"` \| `"projects"` | value must exist in that reference file |
-| `"x-tracked": true` | field counts toward the coverage percentage |
-| `"x-graph": "<name>"` | the field's values are graph edges, checked for cycles |
-| `"x-kind": "<kind>"` | wording of the error message (set on `$defs`, not on fields) |
-
-**Add a coded field** — two files, no code:
-
-```jsonc
-// 1. schema/project.schema.json
-"operations": {
-  "properties": {
-    "backup_class": {"$ref": "#/$defs/code", "x-taxonomy": "backup_class", "x-tracked": true}
-  }
-}
-```
 ```yaml
-# 2. schema/taxonomy.yaml
-  backup_class:
-    order: [gold, silver, none, unknown]
-    codes:
-      gold:    {label_de: Gold, label_en: Gold, colour: null}
-      silver:  {label_de: Silber, label_en: Silver, colour: null}
-      none:    {label_de: Keine, label_en: None, colour: null}
-      unknown: {label_de: Unbekannt, label_en: Unknown, colour: null}
+  jira_ticket:
+    $ref: '#/$defs/text'      # what kind of value
+    x-tracked: true           # counts toward the coverage %
+    x-column: true            # appears in the report and the Excel sheet
 ```
 
 Then `./check.sh --check-schema`. That is the whole change — validation,
-referential integrity and coverage all pick it up.
-`tests/test_validate.py::test_a_new_coded_field_needs_only_schema_and_taxonomy_edits`
-asserts exactly this, including that `validate.py` is byte-identical afterwards.
+referential integrity, coverage, the Parquet schema, the report model and the
+Excel sheet all follow from it. No Python.
 
-**Add a code to an existing field**: edit `schema/taxonomy.yaml` only.
-**Add a site or team**: edit `schema/sites.yaml` / `schema/teams.yaml` only.
+`schema/project.schema.yaml` is YAML, not JSON, because the people who
+maintain it hand-edit YAML all day and because YAML takes comments. A `.json`
+schema is still loaded if that is what a checkout has.
+
+### Which `$ref` to use
+
+| `$ref` | for | why it exists |
+|---|---|---|
+| `text` | free text | |
+| `code` | one of a fixed set | valid values live in `taxonomy.yaml`, never in the schema |
+| `count` | a number | `0` and "not established" must not be the same value |
+| `date` | a date | a bare YAML date is accepted and normalised |
+| `version` | a version number | unquoted `7.9` is a float that prints as `7.9000000000000004` |
+
+### The annotations
+
+| annotation | effect |
+|---|---|
+| `x-taxonomy: <group>` | value must be a code in that `taxonomy.yaml` group |
+| `x-ref: sites` \| `teams` \| `projects` | value must exist in that reference file |
+| `x-tracked: true` | counts toward the coverage percentage |
+| `x-column: true` | gets a column in the projects table, the model and the Excel sheet. Use a string to name the column: `x-column: migration_status` |
+| `x-graph: <name>` | values are graph edges, checked for cycles |
+
+`x-column` cannot go on a field inside a list — the projects table has one row
+per project, so a repeated field has no single value to put in a column. It
+belongs on the `datastores` / `environments` table at its own grain, and
+`--check-schema` says so if you try.
+
+Use `snake_case`. A hyphenated name is legal YAML but becomes a subtraction in
+SQL; identifiers are quoted so it fails loudly rather than silently.
+
+### Optional and mandatory
+
+**Every field is optional by default.** Only `id` and `schema_version` are
+required. That is deliberate (HANDOFF 2): a team that cannot submit a
+half-filled file will keep its data in a private spreadsheet, and you will
+never see it.
+
+So the question is never "how do I make this optional" but "how hard do I
+press". Four levels:
+
+| level | how | if the value is missing |
+|---|---|---|
+| silent | just add the field | nothing happens, nobody notices |
+| **tracked** ← use this | `x-tracked: true` | lowers that team's coverage %. Visible, never blocking. |
+| warned | a rule in the plausibility layer | a warning, still exit 0 |
+| mandatory | add the name to `required:` at the top | error, exit 1, commit rejected |
+
+`schema/project.schema.yaml` carries a worked example of each —
+`my_optional_field` and `my_mandatory_field` — with the trade-offs written
+next to them. Delete them once you have your own.
+
+**Before adding a mandatory field**, know the cost: every existing project
+file must be edited before validation passes again. Adding
+`my_mandatory_field` broke all 10 projects and all 21 fixtures until each was
+given a value.
+
+And a trap: `required:` **inside a block** only applies when that block is
+present, so deleting the block is a legal way around it. Only `required:` at
+the root of the file is unconditional.
 
 ### Always run `--check-schema` after editing the schema
 
@@ -107,22 +247,10 @@ failure mode this design has, so it has its own check:
 
 ```
 $ ./check.sh --check-schema
-schema/project.schema.json
+schema/project.schema.yaml
   classification.security_class: unknown annotation 'x-taxonmy'
-  known: x-doc, x-graph, x-kind, x-ref, x-taxonomy, x-tracked
+  known: x-column, x-doc, x-graph, x-kind, x-ref, x-taxonomy, x-tracked
 ```
-
-### Pick a `$def` rather than writing types by hand
-
-`$defs` exist so the YAML traps in HANDOFF §9 are solved once:
-
-| `$def` | use for | why |
-|---|---|---|
-| `code` | any enum-like value | valid values live in `taxonomy.yaml`, never in the schema |
-| `version` | every version number | unquoted `7.9` is a float that prints as `7.9000000000000004` |
-| `date` | every date | a bare YAML date is accepted and normalised to a string |
-| `count` | every number | `0` and "not established" must not be the same value |
-| `text` | free text | |
 
 ## Validation
 
@@ -145,7 +273,7 @@ Five layers, all in `tools/validate.py`:
 Errors name file, line and fix:
 
 ```
-projects/team-alpha/payment-gateway.yaml:9:21
+projects/payment-gateway.yaml:9:21
   classification_b: 'CB-7' is not a known code
   did you mean: CB-4
   valid: CB-1, CB-2, CB-3, CB-4, unknown  (see schema/taxonomy.yaml, group 'classification_b')
@@ -173,19 +301,22 @@ be reported. **Adding a failure case is a new directory, not a Python change.**
 
 Recorded so they read as decisions rather than drift.
 
-- **Shell scripts instead of a Makefile** (§6.5 specifies `make check` etc.).
-  Requested. Same targets, same containers.
-- **The pipeline does not use docker-compose.** `podman compose` in 4.x
-  delegates to whichever compose implementation is installed, which is not
-  something to put under a pre-commit hook. `check.sh` calls `podman run`
-  directly. `docker-compose.yml` is kept for the genuinely long-lived services
-  (`serve`, `scheduler`) and for anyone who prefers it.
+Bash entry points instead of a Makefile, podman-first, and compose off the
+daily path were deviations at first; HANDOFF.md §6.5 and §8.3 have since been
+updated to specify them, so they are no longer deviations. What remains:
+
 - **A warm container is allowed for the pre-commit hook.** §8.3 says one-shot
   jobs, and the canonical path still is; `exec` into a warm container is a
   latency optimisation for the hook only and nothing depends on it.
 - **Both `placement` shapes validate** — a single `datacenter` scalar and an
   `environments` list. §12.4 is still open; `snapshot.py` normalises in M2.
   A file using both at once gets a warning.
+- **`definitions.yaml` declares `grain` + `counts`, not raw SQL.** §7 sketches
+  a `sql:` string per rule. Raw SQL in YAML is a second language for a junior
+  to get wrong and an injection path into the query builder; the shapes
+  actually needed are few, so each rule declares its grain and what it counts
+  and `build_model.py` composes the SQL. The prose `text_de` / `text_en` are
+  unchanged and still printed next to the numbers.
 - **Dates are normalised before structural validation.** A bare YAML date
   (`2026-09-14`) resolves to a date object and would fail `type: string`.
   Versions get no such treatment: an unquoted `7.9` must fail loudly, because

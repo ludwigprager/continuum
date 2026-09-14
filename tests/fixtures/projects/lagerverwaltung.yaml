@@ -2,6 +2,7 @@
 # "unknown" all mean the same thing and must all validate.
 schema_version: 1
 id: lagerverwaltung
+my_mandatory_field: TODO
 name: Lagerverwaltung
 ownership:
   team_id: team-gamma

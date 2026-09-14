@@ -1,0 +1,141 @@
+# Which numbers and tables appear in the daily report.
+#
+# This file is the reason adding a newly-collected field to the deck is a
+# config change and not a code change (HANDOFF 6.3). A field named here but
+# absent from the data renders n/a; it does not crash the run.
+#
+# Every table names the `definition` it was counted under. Those live in
+# reports/definitions.yaml and are printed alongside the numbers.
+
+report:
+  title_de: "Migrationsstatus - Tagesbericht"
+  title_en: "Migration status - daily report"
+
+# The numbers on slide 2 / the top of the txt summary.
+headline:
+  - key: projects_total
+    definition: projects_total
+    label_de: "Projekte gesamt"
+    label_en: "Projects"
+
+  - key: migrated
+    definition: projects_by_status
+    column: migration_status
+    equals: migrated
+    label_de: "Migriert"
+    label_en: "Migrated"
+
+  - key: in_progress
+    definition: projects_by_status
+    column: migration_status
+    equals: in_progress
+    label_de: "In Arbeit"
+    label_en: "In progress"
+
+  - key: not_assessed
+    definition: projects_by_status
+    column: migration_status
+    equals: not_assessed
+    label_de: "Nicht bewertet"
+    label_en: "Not assessed"
+
+  - key: blockers_open
+    definition: blockers_by_status
+    column: status
+    equals: open
+    label_de: "Offene Blocker"
+    label_en: "Open blockers"
+
+tables:
+  by_status:
+    kind: distribution
+    definition: projects_by_status
+    column: migration_status
+    taxonomy: migration_status
+    title_de: "Projekte je Status"
+    title_en: "Projects by status"
+
+  by_strategy:
+    kind: distribution
+    definition: projects_by_strategy
+    column: migration_strategy
+    taxonomy: migration_strategy
+    title_de: "Projekte je Strategie"
+    title_en: "Projects by strategy"
+
+  by_engine:
+    kind: distribution
+    definition: projects_with_engine
+    column: engine
+    taxonomy: engine
+    title_de: "Projekte je Datenbank"
+    title_en: "Projects by datastore"
+
+  by_team:
+    kind: distribution
+    definition: projects_by_team
+    column: team_id
+    reference: teams
+    title_de: "Projekte je Team"
+    title_en: "Projects by team"
+
+  by_security_class:
+    kind: distribution
+    definition: projects_by_classification
+    column: security_class
+    taxonomy: security_class
+    title_de: "Projekte je Sicherheitsklasse"
+    title_en: "Projects by security class"
+
+  by_site:
+    kind: distribution
+    definition: environments_by_site
+    column: datacenter
+    reference: sites
+    title_de: "Umgebungen je Standort"
+    title_en: "Environments by site"
+
+  by_blocker_status:
+    kind: distribution
+    definition: blockers_by_status
+    column: status
+    taxonomy: blocker_status
+    title_de: "Blocker je Status"
+    title_en: "Blockers by status"
+
+  site_x_os:
+    kind: cross_tab
+    definition: environments_by_site_and_os
+    rows: datacenter
+    columns: os_family
+    rows_reference: sites
+    columns_taxonomy: os_family
+    title_de: "Standort x Betriebssystem"
+    title_en: "Site x OS family"
+
+  # Deliberately names a field that is in the schema but which no team has
+  # filled in yet. Every row lands under unknown - visible, not dropped.
+  by_deployment_model:
+    kind: distribution
+    definition: projects_by_classification
+    column: deployment_model
+    taxonomy: deployment_model
+    title_de: "Projekte je Betriebsmodell"
+    title_en: "Projects by deployment model"
+
+  # Deliberately names a column that does not exist in the data at all - a
+  # field somebody added to the spec before anyone started collecting it.
+  # Must render n/a rather than crash (HANDOFF 6.3).
+  by_backup_class:
+    kind: distribution
+    definition: projects_by_classification
+    column: backup_class
+    taxonomy: security_class
+    title_de: "Projekte je Backup-Klasse"
+    title_en: "Projects by backup class"
+
+# Rendered once as PNG by charts.py (M4) and embedded everywhere else.
+charts:
+  - by_status
+  - by_engine
+  - by_site

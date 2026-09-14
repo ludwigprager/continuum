@@ -1,0 +1,119 @@
+# Counting rules. HANDOFF 7.
+#
+# "How many projects have DB2" has at least three defensible answers. Every
+# rule lives here, is applied in exactly one place in build_model.py, is named
+# by every table in report_model.json that used it, and is printed on a sheet
+# in the Excel and an appendix page in the PDF.
+#
+# Each definition declares:
+#   grain  - which table the rows come from
+#            (projects | datastores | environments | blockers | dependencies)
+#   count  - what a number means:
+#              projects = COUNT(DISTINCT project_id), never double counted
+#              rows     = COUNT(*), one per row at that grain
+#
+# --------------------------------------------------------------------------
+# How `unknown` is counted
+# --------------------------------------------------------------------------
+# `unknown` is an explicit row in every distribution and is never dropped
+# (HANDOFF 11). Two things make that true:
+#
+#   1. A missing or null coded value is written as the string `unknown` when
+#      the snapshot is flattened. It is not NULL and it does not vanish.
+#   2. A project with no `datastores:` block at all still gets one datastores
+#      row, with engine=unknown and is_placeholder=true. Without it, "projects
+#      by engine" would quietly have a smaller denominator than "projects
+#      total", and the two slides would disagree.
+#
+# So the engine distribution sums to the project count, and the unknown bar is
+# the honest one. is_placeholder distinguishes "nobody declared a datastore"
+# from "somebody declared engine: unknown" when that matters.
+
+definitions:
+
+  projects_total:
+    grain: projects
+    count: projects
+    text_de: "Alle Projektdateien unter projects/, ohne Dateien mit führendem Unterstrich."
+    text_en: "Every project file under projects/, excluding files whose name starts with an underscore."
+
+  projects_by_status:
+    grain: projects
+    count: projects
+    text_de: "Ein Projekt zählt in genau einer Statuszeile. Ohne Angabe: unknown."
+    text_en: "One row per project, never double counted. No value declared counts as unknown."
+
+  projects_by_strategy:
+    grain: projects
+    count: projects
+    text_de: "Ein Projekt zählt in genau einer Strategiezeile. Ohne Angabe: unknown."
+    text_en: "One row per project, never double counted. No value declared counts as unknown."
+
+  projects_by_team:
+    grain: projects
+    count: projects
+    text_de: "Ein Projekt zählt bei genau einem Team, abgeleitet aus ownership.team_id."
+    text_en: "One row per project, by ownership.team_id."
+
+  projects_by_classification:
+    grain: projects
+    count: projects
+    text_de: "Ein Projekt zählt in genau einer Klassifizierungszeile. Ohne Angabe: unknown."
+    text_en: "One row per project, never double counted. No value declared counts as unknown."
+
+  projects_with_engine:
+    grain: datastores
+    count: projects
+    text_de: >-
+      Projekte mit mindestens einem Datastore mit engine=X, über alle
+      Umgebungen. Ein Projekt mit zwei Engines zählt in beiden Zeilen, die
+      Summe ist daher grösser als die Projektanzahl. Projekte ohne
+      Datastore-Angabe zählen unter unknown.
+    text_en: >-
+      Projects having at least one datastore with engine=X, across all
+      environments. A project with two engines counts in both rows, so the
+      column sums to more than the project total. Projects that declared no
+      datastore at all count under unknown.
+
+  datastore_instances:
+    grain: datastores
+    count: rows
+    text_de: >-
+      Anzahl der Datastore-Einträge, nicht der Projekte. Platzhalterzeilen für
+      Projekte ohne Datastore-Angabe sind ausgenommen.
+    text_en: >-
+      Number of datastore entries, not projects. Placeholder rows for projects
+      that declared no datastore are excluded.
+
+  environments_by_site:
+    grain: environments
+    count: rows
+    text_de: >-
+      Umgebungen je Standort. Ein Projekt mit Umgebungen an drei Standorten
+      zählt dreimal.
+    text_en: >-
+      Environments per site. A project with environments at three sites counts
+      three times.
+
+  environments_by_site_and_os:
+    grain: environments
+    count: rows
+    text_de: >-
+      Umgebungen an Standort X mit OS-Familie Y. Ein Projekt kann an mehreren
+      Standorten zählen. Zeilen- und Spaltensummen beziehen sich auf
+      Umgebungen, nicht auf Projekte.
+    text_en: >-
+      Environments at site X with OS family Y. A project can count at several
+      sites. Row and column totals are environments, not projects.
+
+  blockers_by_status:
+    grain: blockers
+    count: rows
+    text_de: "Einzelne Blocker-Einträge, nicht Projekte. Ein Projekt kann mehrere haben."
+    text_en: "Individual blocker entries, not projects. One project may have several."
+
+  dependencies_total:
+    grain: dependencies
+    count: rows
+    text_de: "Gerichtete Kanten aus integration.depends_on. Eine Kante je Paar."
+    text_en: "Directed edges from integration.depends_on, one row per pair."

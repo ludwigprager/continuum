@@ -3,3 +3,4 @@
 # is the correct, honest answer - not a validation failure.
 schema_version: 1
 id: minimal-record
+my_mandatory_field: TODO
