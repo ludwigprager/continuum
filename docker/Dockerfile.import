@@ -1,0 +1,28 @@
+# Import image. Built outside the air gap, carried in (HANDOFF 8.1).
+# Same base as the pipeline image; only openpyxl and PyYAML on top.
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=Europe/Berlin \
+    LANG=de_DE.UTF-8 \
+    LC_ALL=de_DE.UTF-8
+
+# The source spreadsheet is German: without the locale, umlauts in project
+# names and German month names come out wrong, and there is no network at
+# runtime to fix it.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends locales tzdata; \
+    sed -i 's/^# *\(de_DE.UTF-8 UTF-8\)/\1/' /etc/locale.gen; \
+    locale-gen; \
+    ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime; \
+    echo "$TZ" > /etc/timezone; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY docker/requirements.import.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+RUN groupadd -g 1000 pipeline && useradd -u 1000 -g 1000 -m -s /bin/bash pipeline
+USER pipeline
+WORKDIR /work

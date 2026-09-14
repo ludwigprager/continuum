@@ -1,0 +1,8 @@
+# The importer's dependencies, and only those. Pinned exactly.
+#
+# Kept separate from the pipeline image (HANDOFF 8.1): the import runs rarely
+# and has no business carrying the renderer stack. The pipeline image in turn
+# has no openpyxl and no PyYAML - ruamel.yaml is the only YAML library there,
+# so there is one parser with one set of behaviours.
+openpyxl==3.1.5
+PyYAML==6.0.3

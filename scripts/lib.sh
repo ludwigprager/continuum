@@ -13,6 +13,18 @@ IMAGE_NAME="${IMAGE_NAME:-mig-pipeline}"
 IMAGE_TAG="${IMAGE_TAG:-0.2.0}"
 IMAGE_REF="${IMAGE_REF:-${IMAGE_NAME}:${IMAGE_TAG}}"
 
+# The importer runs rarely and does not need the renderer stack, so it has its
+# own image (HANDOFF 8.1). Entry points that need it set DOCKERFILE and
+# IMAGE_REF before calling run_in_container.
+IMPORT_IMAGE_REF="${IMPORT_IMAGE_REF:-mig-import:${IMAGE_TAG}}"
+DOCKERFILE="${DOCKERFILE:-docker/Dockerfile.pipeline}"
+
+# Switch to the import image for this shell. See HANDOFF 8.1.
+use_import_image() {
+    IMAGE_REF="$IMPORT_IMAGE_REF"
+    DOCKERFILE="docker/Dockerfile.import"
+}
+
 # Name of the optional warm container used by the pre-commit hook.
 DEV_CONTAINER="${DEV_CONTAINER:-mig-dev}"
 
@@ -57,9 +69,10 @@ engine_user_args() {
 image_exists() { "$ENGINE" image inspect "$IMAGE_REF" >/dev/null 2>&1; }
 
 build_image() {
-    printf 'building %s with %s (first run only)\n' "$IMAGE_REF" "$ENGINE" >&2
+    printf 'building %s from %s with %s (first run only)\n' \
+        "$IMAGE_REF" "$DOCKERFILE" "$ENGINE" >&2
     "$ENGINE" build \
-        -f "$REPO_ROOT/docker/Dockerfile.pipeline" \
+        -f "$REPO_ROOT/$DOCKERFILE" \
         -t "$IMAGE_REF" \
         "$REPO_ROOT" >&2 \
         || die "image build failed"

@@ -1092,6 +1092,11 @@ def pick_column(headers: list[str], profiles: list[ColumnProfile],
                 explicit: str | None, hint_rx: re.Pattern, need_unique: bool,
                 require_hint: bool = False) -> str | None:
     if explicit:
+        # "none" means: do not use a column here at all. Without this there is
+        # no way to switch off auto-detection, and `--group-column ""` falls
+        # through to it because the empty string is falsy.
+        if explicit.strip().lower() == "none":
+            return None
         if explicit not in headers:
             raise SystemExit(f"column {explicit!r} not found. Available: {headers}")
         return explicit

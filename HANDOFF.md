@@ -644,12 +644,13 @@ sheet without touching the data, and have the numbers match the `counts` sheet.
 
 **M5 — PDF and PPTX.**
 
-**Not yet started, and not a milestone of its own:** `import.sh`. The importer
-exists and is tested but has no container — `Dockerfile.import` is unwritten,
-so `import_xlsx.py` cannot currently be run the way everything else is. It also
-auto-detects a grouping column and would recreate per-team directories under
-`projects/`, which is no longer the layout (see 2); `--group-column ""` does not
-suppress that, so the tool needs a way to say "no grouping".
+**Not a milestone of its own, and done:** `import.sh` and
+`docker/Dockerfile.import`. The importer and `make_testdata.py` now run in a
+container like everything else. `import_xlsx.py` gained one line:
+`--group-column none` switches off the auto-detected grouping column, without
+which a re-import would recreate the per-team directories that 2 removed
+(`--group-column ""` falls through to auto-detection, because the empty string
+is falsy). Auto-detection is unchanged when the flag is absent.
 
 **M6 — `--network=none` CI job passing**, and the offline bundle documented:
 images as OCI archives pinned by digest, the repo as a `git bundle` so history

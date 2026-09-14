@@ -4,3 +4,6 @@ projekte.xlsx
 __pycache__/
 *.pyc
 .pytest_cache/
+import/profile.json
+import/import-report.md
+import/profile.md
