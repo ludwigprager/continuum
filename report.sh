@@ -11,8 +11,8 @@
 # intermediate tables do not - there is one current generation and one
 # previous, and git is the history.
 #
-# The renderers read report_model.json and nothing else. M3 ships the Excel;
-# charts, txt, pdf and pptx follow in M4-M5.
+# The renderers read report_model.json and nothing else. M3 shipped the Excel,
+# M4 the charts and the txt; pdf and pptx follow in M5.
 set -euo pipefail
 # shellcheck source=scripts/lib.sh
 source "$(dirname "$0")/scripts/lib.sh"
@@ -45,9 +45,12 @@ run_in_container --rw -- python3 tools/build_model.py \
     --as-of "$DATE" \
     ${GENERATED_AT:+--generated-at "$GENERATED_AT"}
 
-# Renderers, in order. charts.py (M4) will come first once it exists, because
-# everything else embeds its PNGs.
-run_in_container --rw -- python3 tools/render/xlsx.py \
-    --model "out/reports/$DATE/report_model.json" \
-    --out "out/reports/$DATE" \
-    --lang "$LANG_CODE"
+# Renderers, in order. charts.py runs first: everything else embeds its PNGs
+# rather than drawing its own, which is what keeps five outputs showing one
+# set of numbers (SPEC 2).
+for renderer in charts xlsx txt; do
+    run_in_container --rw -- python3 "tools/render/$renderer.py" \
+        --model "out/reports/$DATE/report_model.json" \
+        --out "out/reports/$DATE" \
+        --lang "$LANG_CODE"
+done

@@ -70,8 +70,10 @@ projects/**/*.yaml
 out/tables/*.jsonl  ->  DuckDB  ->  out/reports/<date>/report_model.json
                                        |  renderers lay out; they never compute
                                        v
-                       report.xlsx      <- M3, built
-                       *.png  report.txt  report.pdf  deck.pptx   <- M4-M5
+                       *.png            <- M4, built. Runs first; the others
+                       report.xlsx      <- M3, built    embed these PNGs.
+                       report.txt       <- M4, built
+                       report.pdf  deck.pptx            <- M5
 ```
 
 `report_model.json` is the only thing renderers read. If a renderer needs a
@@ -157,6 +159,62 @@ arrived today.
 The workbook is byte-identical for identical input, like the model. That takes
 pinning both the zip entry timestamps and `docProps/core.xml`, which openpyxl
 stamps with the wall clock as it saves.
+
+### The charts
+
+`charts.py` runs first in `report.sh`, and everything else embeds its PNGs
+(SPEC 2). Five renderers each drawing their own chart is how five outputs end
+up with five different numbers.
+
+One PNG per entry in the `charts:` list of `reports/daily.yaml`, named after
+the table it draws (`by_status` -> `by_status.png`), 1600x900. Adding one is a
+config change: name a table that already exists in the report and the next run
+renders it.
+
+| the table's shape | what gets drawn |
+|---|---|
+| `distribution` | horizontal bars, one per code, the value at the bar end |
+| `cross_tab` | horizontal stacked bars, one segment per column code, plus a legend |
+| not available yet | a panel carrying the model's own note, at the same size |
+
+The last row matters: a field named in the report spec that nobody has
+collected yet still gets its file, because the Excel dashboard, the deck and
+the PDF all reference a chart by the path the model gave them. A hole in the
+deck is worse than a panel saying the field is not there.
+
+Every chart carries its counting rule and both coverage numbers in the footer
+(SPEC 7) - raw and verified, never merged (SPEC 11). `unknown` is a bar like
+any other, in the grey `taxonomy.yaml` gives it; the colours are baked into
+the model by `build_model.py`, so the renderer never opens the taxonomy.
+
+Codes with no label yet are drawn as bare codes. That is SPEC 12.1 and it is
+deliberate: inventing words would put invented words in front of management.
+
+Two things keep the PNGs reproducible, which matters because the PDF and the
+deck will embed them: matplotlib is pinned to the patch version, and the
+`Software` chunk - which carries the matplotlib version into the file - is
+dropped rather than written.
+
+### The text report
+
+`report.txt` is the cheapest output and the one that answers "what changed
+since yesterday": there is no day-over-day comparison in the pipeline, so
+`diff` on two of these is it.
+
+```bash
+diff out/reports/2026-09-13/report.txt out/reports/2026-09-14/report.txt
+```
+
+That is why every column is a fixed width, set in `txt.py` and never by the
+data. A layout that sizes its columns to the widest value reflows every row
+the day one label gets longer, and the diff is then noise rather than news.
+A value too long for its column is cut with an ellipsis; the full value is in
+the Excel, which is where slicing happens anyway. `tests/test_txt.py` asserts
+both: that one changed field changes at most a handful of lines, and that a
+much longer project name moves no column at all.
+
+The template is `templates/report.txt.j2`, rendered with `StrictUndefined` -
+a typo in the template is an error rather than a section that quietly leaves.
 
 ### Counting rules
 
@@ -380,6 +438,17 @@ updated to specify them, so they are no longer deviations. What remains:
   Excel. The pivot XML it writes was verified by opening the result in a
   spreadsheet application and checking the refreshed numbers against the
   `counts` sheet; it has not been opened in Microsoft Excel itself.
+- **The model carries two things §5.2 does not list: a `kind` on every table
+  and a colour on every code.** Both exist so the renderers stay dumb. A
+  renderer that guesses a table's shape from its column count draws the wrong
+  chart the day a table grows a column, so the shape is named. And §5.2 says
+  renderers never touch the taxonomy, which would leave `charts.py` unable to
+  honour the `colour` the taxonomy carries - so the colours are looked up once
+  and baked in beside the labels. Where a column's codes come from a reference
+  list rather than a taxonomy group (sites, teams), `unknown` takes the colour
+  the taxonomy groups agree on, so the unknown bar is the same grey on every
+  chart. Nothing is invented in code: if the groups disagree, there is no
+  fallback and the renderer's own palette applies.
 - **Dates are normalised before structural validation.** A bare YAML date
   (`2026-09-14`) resolves to a date object and would fail `type: string`.
   Versions get no such treatment: an unquoted `7.9` must fail loudly, because

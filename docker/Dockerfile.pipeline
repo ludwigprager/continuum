@@ -5,14 +5,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TZ=Europe/Berlin \
     LANG=de_DE.UTF-8 \
-    LC_ALL=de_DE.UTF-8
+    LC_ALL=de_DE.UTF-8 \
+    MPLBACKEND=Agg \
+    MPLCONFIGDIR=/opt/mpl
 
 # Locale and timezone must be baked in: without them German month names and
 # number formatting come out wrong, and there is no network at runtime to fix it.
 # shellcheck is here because the entry points are shell and juniors maintain them.
+# The fonts are explicit because a missing font does not error, it silently
+# substitutes (SPEC 8.2); charts.py asserts at startup that the one it asks for
+# is the one it got.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends locales tzdata shellcheck; \
+    apt-get install -y --no-install-recommends \
+        locales tzdata shellcheck fonts-dejavu fonts-liberation; \
     sed -i 's/^# *\(de_DE.UTF-8 UTF-8\)/\1/' /etc/locale.gen; \
     locale-gen; \
     ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime; \
@@ -21,6 +27,25 @@ RUN set -eux; \
 
 COPY docker/requirements.pipeline.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+# matplotlib builds its font cache on first use, which is a write to $HOME and,
+# on a cache miss, a reach for the network (SPEC 8.2). Build it here, into the
+# directory named by MPLCONFIGDIR, so the first chart rendered inside the air
+# gap finds it already there. Importing pyplot is what builds it.
+#
+# Mode 1777, like /tmp, and not a+rX: matplotlib *rejects* a read-only
+# MPLCONFIGDIR, warns, and silently rebuilds the whole cache in a temporary
+# directory - which is the trap this step exists to close. The container user
+# is not known here (podman maps the host uid in with --userns=keep-id), so
+# the directory has to be writable by whoever ends up running.
+RUN set -eux; \
+    mkdir -p "$MPLCONFIGDIR"; \
+    python3 -c "import matplotlib; matplotlib.use('Agg'); \
+                import matplotlib.pyplot; \
+                from matplotlib import font_manager; \
+                print(len(font_manager.fontManager.ttflist), 'fonts cached')"; \
+    chmod -R a+rwX "$MPLCONFIGDIR"; chmod 1777 "$MPLCONFIGDIR"; \
+    test -n "$(ls -A "$MPLCONFIGDIR")"
 
 # uid 1000 so rootless podman's --userns=keep-id maps the host user cleanly.
 RUN groupadd -g 1000 pipeline && useradd -u 1000 -g 1000 -m -s /bin/bash pipeline

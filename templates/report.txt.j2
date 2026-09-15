@@ -1,0 +1,88 @@
+{# report.txt.j2 - the plain-text report. SPEC 6.4, milestone M4.
+
+   Fixed column widths on purpose: this file is diffed day over day, and that
+   turns out to be the fastest way to answer "what changed since yesterday".
+   A column that moves because a label got longer puts every row in the diff,
+   so widths come from txt.py and never from the data.
+
+   Everything here is a lookup into report_model.json. The template computes
+   nothing (SPEC 11) - no sums, no percentages, no sorting. `w` is the page
+   width, `c` the chrome words, `col`/`num` the padding filters.
+#}
+{{ rule("=") }}
+{{ report_title }}
+{{ col(c.as_of ~ ": " ~ model.as_of_date, 40) }}{{ c.generated }}: {{ model.generated_at }}
+{{ rule("-") }}
+{{ col(c.git_sha, 18) }}{{ p.git_sha }}{% if p.git_tag %}  ({{ p.git_tag }}){% endif %}
+
+{{ col(c.schema_version, 18) }}{{ p.schema_version }}
+{{ col(c.pipeline, 18) }}{{ p.pipeline_version }}
+{{ col(c.image, 18) }}{{ p.image_digest or c.unknown }}
+{{ col(c.projects, 18) }}{{ p.project_count }}
+{{ rule("=") }}
+
+{{ c.headline | upper }}
+{{ rule("-") }}
+{% for item in model.headline %}
+{{ col(item[label_field], 34) }}{{ num(item.value, 10) }}   {{ item.definition }}
+{% endfor %}
+
+{{ c.coverage | upper }}
+{{ rule("-") }}
+{# Raw coverage and verified coverage are two numbers, never merged (SPEC 11).
+   An import gives 90% raw coverage that nobody has looked at. #}
+{{ col(c.projects_total, 34) }}{{ num(cov.projects_total, 10) }}
+{{ col(c.fields_tracked, 34) }}{{ num(cov.fields_tracked, 10) }}
+{{ col(c.field_coverage, 34) }}{{ num(cov.field_coverage_pct, 10) }} %
+{{ col(c.verified_coverage, 34) }}{{ num(cov.verified_coverage_pct, 10) }} %
+
+{{ col(c.team, 24) }}{{ num(c.projects, 10) }}{{ num(c.coverage, 12) }}{{ num(c.verified, 12) }}
+{{ rule("-") }}
+{% for team in cov.by_team %}
+{{ col(team.team_id, 24) }}{{ num(team.projects, 10) }}{{ num(team.coverage_pct, 12) }}{{ num(team.verified_pct, 12) }}
+{% endfor %}
+
+{{ c.tables | upper }}
+{% for key, table in tables %}
+
+{{ rule("-") }}
+{{ table[title_field] or key }}
+{{ col(key, 24) }}{{ table.definition }}  ({{ table.grain }}/{{ table.counts }})
+{{ rule("-") }}
+{% if not table.available %}
+{{ table[note_field] }}
+{% elif table.kind == "cross_tab" %}
+{#- A cross-tab keeps its shape: the row code, one column per code, then the
+    row total the model computed. #}
+{{ col(c.code ~ " / " ~ c.label, 22) }}{% for column in table.columns[1:] %}{{ num(column[label_field] | truncate_cell(10), 11) }}{% endfor %}
+
+{% for record in table.rows %}
+{{ col(record[table.columns[0].key] ~ "  " ~ record[table.columns[0].key ~ "_label_" ~ lang], 22) }}{% for column in table.columns[1:] %}{{ num(record[column.key], 11) }}{% endfor %}
+
+{% endfor %}
+{% else %}
+{{ col(c.code, 18) }}{{ col(c.label, 34) }}{{ num(c.count, 10) }}
+{% for record in table.rows %}
+{{ col(record[table.columns[0].key], 18) }}{{ col(record[table.columns[0].key ~ "_label_" ~ lang], 34) }}{{ num(record.value, 10) }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+{{ c.charts | upper }}
+{{ rule("-") }}
+{% for chart in model.charts %}
+{{ col(chart.path, 24) }}{{ chart[title_field] }}
+{% else %}
+{{ c.none }}
+{% endfor %}
+
+{{ c.definitions | upper }}
+{{ rule("-") }}
+{# SPEC 7: a number and the rule it was counted under never travel separately. #}
+{% for definition in model.definitions %}
+{{ col(definition.key, 30) }}{{ definition.grain }}/{{ definition.counts }}
+{% for line in definition[text_field] | wrap(w - 4) %}
+    {{ line }}
+{% endfor %}
+{% endfor %}
+{{ rule("=") }}

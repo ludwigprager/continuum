@@ -23,18 +23,22 @@ step "full pipeline against fixtures, --network=none"
 # the whole thing with no network at all. This is that job, run locally.
 PIN="2026-09-14T04:00:00+02:00"
 REPORT_DIR="$REPO_ROOT/out/reports/fixtures"
-# Every artifact the pipeline produces, hashed before and after a second run.
-ARTIFACTS=(report_model.json report.xlsx)
+# Everything the run produced, hashed before and after a second run. The
+# whole directory rather than a list: a chart added to reports/daily.yaml is
+# a config change (SPEC 6.3) and must not need an edit here to be covered,
+# and a file that stops being written has to fail this too.
+hash_report_dir() { (cd "$REPORT_DIR" && sha256sum ./*); }
+rm -rf "$REPORT_DIR"
 if "$REPO_ROOT/report.sh" --projects tests/fixtures/projects --date fixtures \
         --generated-at "$PIN" >/dev/null 2>&1; then
-    before=$(sha256sum "${ARTIFACTS[@]/#/$REPORT_DIR/}")
+    before=$(hash_report_dir)
     "$REPO_ROOT/report.sh" --projects tests/fixtures/projects --date fixtures \
         --generated-at "$PIN" >/dev/null 2>&1
-    after=$(sha256sum "${ARTIFACTS[@]/#/$REPORT_DIR/}")
+    after=$(hash_report_dir)
     if [ "$before" = "$after" ]; then
-        for artifact in "${ARTIFACTS[@]}"; do
-            printf '  ok   %-18s byte-identical across runs\n' "$artifact"
-        done
+        while read -r _ artifact; do
+            printf '  ok   %-20s byte-identical across runs\n' "${artifact#./}"
+        done <<< "$before"
     else
         printf '  FAIL an artifact differs between runs\n%s\n%s\n' \
             "$before" "$after"

@@ -85,10 +85,19 @@ build_image() {
 ensure_image() { image_exists || build_image; }
 
 # The digest that actually produced a run, for manifest.json from M2 on.
+#
+# An image built locally has no RepoDigest, and docker then prints a bare
+# newline to stdout *before* failing - which ended up inside the digest and,
+# once the txt report started printing provenance, inside the middle of a
+# line. So both readings are trimmed and the first non-empty one wins.
 image_digest() {
-    "$ENGINE" image inspect "$IMAGE_REF" --format '{{index .RepoDigests 0}}' 2>/dev/null \
-        || "$ENGINE" image inspect "$IMAGE_REF" --format '{{.Id}}' 2>/dev/null \
-        || printf 'unknown'
+    local digest=""
+    for format in '{{index .RepoDigests 0}}' '{{.Id}}'; do
+        digest="$("$ENGINE" image inspect "$IMAGE_REF" --format "$format" 2>/dev/null \
+                  | tr -d '[:space:]')"
+        [ -n "$digest" ] && break
+    done
+    printf '%s' "${digest:-unknown}"
 }
 
 # --------------------------------------------------------------------------

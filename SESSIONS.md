@@ -186,10 +186,14 @@ fix them in the Dockerfile, not by relaxing the network restriction.
 
 Don't wait for M6 to build that check. It is already in `./verify.sh`, and it
 stops every air-gap trap at the moment it is introduced rather than six
-milestones later. Two have fired so far and were caught there: DuckDB
-attempting to download extensions, and `enable_external_access=false` turning
-out to block local file reads as well as the network. matplotlib's font cache
-is still ahead, in M4.
+milestones later. Three have fired so far and were caught there: DuckDB
+attempting to download extensions, `enable_external_access=false` turning out
+to block local file reads as well as the network, and — in M4, as predicted —
+matplotlib's font cache. The third had a sting in the tail: baking the cache
+into the image is not enough, because matplotlib refuses a read-only
+`MPLCONFIGDIR`, says so in a warning nobody reads, and rebuilds the cache in a
+temp directory anyway. Typst fetching `@preview` packages is still ahead, in
+M5.
 
 ## Where things stand
 
@@ -198,8 +202,8 @@ is still ahead, in M4.
 | M1 validation | done |
 | M2 tables + model | done |
 | M3 Excel | done |
-| M4 TXT + PNG | next |
-| M5 PDF + PPTX | |
+| M4 TXT + PNG | done |
+| M5 PDF + PPTX | next |
 | M6 offline bundle | `--network=none` already enforced by `./verify.sh` |
 
 `import.sh` and `docker/Dockerfile.import` are done too, though they are not a

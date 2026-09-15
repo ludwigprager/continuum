@@ -2,11 +2,12 @@
 
 You are picking up a project mid-build.
 
-**Done: M1 (validation), M2 (tables + report model) and M3 (Excel).**
-`./check.sh` and `./report.sh` work end to end against `projects/` with no
-network access, under podman or docker, and produce `report.xlsx`. What
-remains is four of the five renderers (M4-M5) and the offline bundle (M6).
-See 10 for the state of each.
+**Done: M1 (validation), M2 (tables + report model), M3 (Excel) and M4
+(TXT + PNG).** `./check.sh` and `./report.sh` work end to end against
+`projects/` with no network access, under podman or docker, and produce
+`report.xlsx`, `report.txt` and the chart PNGs. What remains is two of the
+five renderers (M5) and the offline bundle (M6). See 10 for the state of
+each.
 
 Read this whole document before writing code. The **Contracts** and **Do not**
 sections are the parts that will cost the most to get wrong.
@@ -648,7 +649,21 @@ generates from the `pivots:` section of `reports/daily.yaml` - openpyxl cannot
 create a pivot table, and a hand-made template could not be rebuilt after a
 schema change by anyone without Excel.
 
-**M4 — TXT and PNG.** Cheap, and they make the model easy to eyeball.
+**M4 — TXT and PNG. DONE.** Cheap, and they make the model easy to eyeball.
+`charts.py` runs first in `./report.sh` and everything else embeds its PNGs;
+one file per entry in the `charts:` list of `reports/daily.yaml`, named from
+the chart key. A table the data cannot support yet still gets its PNG,
+carrying the model's own note, because the dashboard, the deck and the PDF
+reference a chart by the path the model gave them. The PNGs and `report.txt`
+are byte-identical for identical input, like the model and the workbook, and
+`./verify.sh` now hashes the whole report directory rather than a list of
+names so a newly configured chart is covered without editing it.
+
+The matplotlib font cache trap in 8.2 fired here and is closed in
+`Dockerfile.pipeline`: the cache is baked at build time into `$MPLCONFIGDIR`,
+which must also be *writable* - matplotlib rejects a read-only one, warns, and
+silently rebuilds the cache somewhere else, which is the failure this was
+meant to prevent.
 
 **M5 — PDF and PPTX.**
 

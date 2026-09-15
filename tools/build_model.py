@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-build_model.py - DuckDB SQL over the Parquet snapshot -> report_model.json.
+build_model.py - DuckDB SQL over the jsonl tables -> report_model.json.
 SPEC 6.3.
 
 report_model.json is the only thing renderers read. It contains every number,
@@ -77,6 +77,22 @@ class Labels:
             if candidate.name != "taxonomy.yaml":
                 self.references[candidate.stem] = load_yaml(candidate).get("entries") or {}
 
+        # The colour taxonomy.yaml gives `unknown`, if its groups agree on one.
+        #
+        # A column whose codes come from a reference list (sites, teams) has no
+        # taxonomy group and therefore no colours at all, so without this the
+        # unknown bar would be grey on one chart and the series colour on the
+        # next. The value is not written here: it is read from the groups, so
+        # recolouring unknown stays a one-line edit to taxonomy.yaml. Groups
+        # that disagree get no fallback rather than an arbitrary winner.
+        declared = set()
+        for group in self.groups.values():
+            entry = (group.get("codes") or {}).get(UNKNOWN)
+            if isinstance(entry, dict) and entry.get("colour"):
+                declared.add(str(entry["colour"]))
+        self.unknown_colour: str | None = \
+            declared.pop() if len(declared) == 1 else None
+
     def order(self, taxonomy: str | None, reference: str | None) -> list[str]:
         if taxonomy and taxonomy in self.groups:
             return [str(c) for c in (self.groups[taxonomy].get("order") or [])]
@@ -98,13 +114,17 @@ class Labels:
             return True
         return bool(reference and self.references.get(reference))
 
+    def entry(self, code: str, taxonomy: str | None,
+              reference: str | None) -> Any:
+        if taxonomy and taxonomy in self.groups:
+            return (self.groups[taxonomy].get("codes") or {}).get(code)
+        if reference and reference in self.references:
+            return self.references[reference].get(code)
+        return None
+
     def label(self, code: str, taxonomy: str | None, reference: str | None,
               lang: str) -> str:
-        entry: Any = None
-        if taxonomy and taxonomy in self.groups:
-            entry = (self.groups[taxonomy].get("codes") or {}).get(code)
-        elif reference and reference in self.references:
-            entry = self.references[reference].get(code)
+        entry = self.entry(code, taxonomy, reference)
         if isinstance(entry, dict):
             value = entry.get(f"label_{lang}")
             if value:
@@ -112,6 +132,22 @@ class Labels:
         # No label yet (SPEC 12.1). Showing the bare code is honest;
         # inventing a label is not. --check-schema warns about every one.
         return code
+
+    def colour(self, code: str, taxonomy: str | None,
+               reference: str | None) -> str | None:
+        """The colour taxonomy.yaml gives this code, or None.
+
+        Baked into the model for the same reason the labels are: charts.py
+        must not open taxonomy.yaml (SPEC 5.2). Most codes have no colour yet
+        and the renderer picks from its own palette; `unknown` has one, so the
+        unknown bar is the same grey in every chart of every report.
+        """
+        entry = self.entry(code, taxonomy, reference)
+        if isinstance(entry, dict):
+            value = entry.get("colour")
+            if value:
+                return str(value)
+        return self.unknown_colour if code == UNKNOWN else None
 
 
 # --------------------------------------------------------------------------
@@ -206,6 +242,9 @@ def distribution(snapshot: Snapshot, spec: dict, definition: dict,
     result: dict[str, Any] = {
         "title_de": spec.get("title_de", column),
         "title_en": spec.get("title_en", column),
+        # The shape, named rather than inferred: a renderer that guesses from
+        # the column count draws the wrong chart the day a table grows one.
+        "kind": "distribution",
         "definition": spec["definition"],
         "grain": table,
         "counts": definition.get("count", "rows"),
@@ -247,6 +286,7 @@ def distribution(snapshot: Snapshot, spec: dict, definition: dict,
                 column: c,
                 f"{column}_label_de": labels.label(c, taxonomy, reference, "de"),
                 f"{column}_label_en": labels.label(c, taxonomy, reference, "en"),
+                f"{column}_colour": labels.colour(c, taxonomy, reference),
                 "value": int(counted.get(c, 0)),
             }
             for c in codes
@@ -262,6 +302,7 @@ def cross_tab(snapshot: Snapshot, spec: dict, definition: dict,
     result: dict[str, Any] = {
         "title_de": spec.get("title_de", ""),
         "title_en": spec.get("title_en", ""),
+        "kind": "cross_tab",
         "definition": spec["definition"],
         "grain": table,
         "counts": definition.get("count", "rows"),
@@ -301,7 +342,8 @@ def cross_tab(snapshot: Snapshot, spec: dict, definition: dict,
     for c in col_codes:
         columns.append({"key": c,
                         "label_de": labels.label(c, col_tax, col_ref, "de"),
-                        "label_en": labels.label(c, col_tax, col_ref, "en")})
+                        "label_en": labels.label(c, col_tax, col_ref, "en"),
+                        "colour": labels.colour(c, col_tax, col_ref)})
     columns.append({"key": "total", "label_de": "Summe", "label_en": "Total"})
 
     rows = []
@@ -310,6 +352,7 @@ def cross_tab(snapshot: Snapshot, spec: dict, definition: dict,
             row_col: r,
             f"{row_col}_label_de": labels.label(r, row_tax, row_ref, "de"),
             f"{row_col}_label_en": labels.label(r, row_tax, row_ref, "en"),
+            f"{row_col}_colour": labels.colour(r, row_tax, row_ref),
         }
         total = 0
         for c in col_codes:
@@ -493,7 +536,7 @@ def build_flat(snapshot: Snapshot, specs: dict[str, list[dict]],
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Build report_model.json from a Parquet snapshot.")
+        description="Build report_model.json from the jsonl tables.")
     parser.add_argument("--snapshot", default=Path("out/tables"), type=Path,
                         help="the jsonl tables written by snapshot.py")
     parser.add_argument("--spec", default=Path("reports/daily.yaml"), type=Path)
@@ -591,6 +634,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "width_px": 1600, "height_px": 900,
             "title_de": tables[key]["title_de"], "title_en": tables[key]["title_en"],
         })
+    # `charts` names tables; the shape of each is already in tables[key].
+    # charts.py reads both and computes nothing (SPEC 11).
 
     model = {
         "generated_at": generated_at,
