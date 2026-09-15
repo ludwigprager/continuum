@@ -465,8 +465,10 @@ that `ls` shows you what can be run:
 `./serve.sh` is the exception to "nothing needs the network": the machine that
 runs the pipeline has no desktop, so the only way to look at an xlsx or a PNG
 is to open it from a browser elsewhere. It publishes a port, mounts
-`out/reports` read-only and nothing else, and `./report.sh` ends by printing
-the URL. There is no authentication - see `--bind`.
+`out/reports` read-only and nothing else, and prints the URL. There is no
+authentication - see `--bind`. `./report.sh` says nothing about it: the URL
+does not change between runs, and one more line on every daily run to repeat
+what starting the server already said is noise.
 
 Each script is a few lines: source `scripts/lib.sh`, call `run_in_container`.
 **All container knowledge lives in `scripts/lib.sh`** — engine detection, mount

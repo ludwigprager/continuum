@@ -61,7 +61,9 @@ case "$ACTION" in
         ;;
     status)
         if container_running "$SERVE_CONTAINER"; then
-            printf 'serving  %s\n' "$(serve_url "$PORT")"
+            # The port the container is actually published on, not the
+            # default: `--status` after `--port 9000` must not print 8000.
+            printf 'serving  %s\n' "$(serve_url "$(serve_running_port)")"
             exit 0
         fi
         printf 'not running. Start it with ./serve.sh\n'

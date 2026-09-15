@@ -296,13 +296,15 @@ a typo in the template is an error rather than a section that quietly leaves.
 
 The machine that runs the pipeline has no desktop, and the xlsx, the PDF, the
 deck and the PNGs are all files somebody has to actually open. `./serve.sh`
-puts a directory listing of `out/reports` on a port, and `./report.sh` ends by
-printing the URL to point a browser at:
+puts a directory listing of `out/reports` on a port and prints the URL to
+point a browser at:
 
 ```
-report: out/reports/2026-09-15
-  open  http://192.168.2.172:8000/2026-09-15/
-        nothing is serving that yet: ./serve.sh --detach
+$ ./serve.sh --detach
+serving http://192.168.2.172:8000/
+  root     out/reports (read-only)
+  bind     0.0.0.0:8000
+  stop     ./serve.sh --stop
 ```
 
 ```bash
