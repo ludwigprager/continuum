@@ -52,6 +52,16 @@ set -euo pipefail
 # shellcheck source=scripts/lib.sh
 source "$(dirname "$0")/scripts/lib.sh"
 
+# One URL per line a browser might use, aligned. There is deliberately no
+# single "the" URL: this machine has no desktop, so whoever reads this is
+# typing it somewhere else, and only they know which of these their machine
+# can resolve and route to.
+print_urls() {
+    serve_urls "$1" | while IFS="$(printf '\t')" read -r url what; do
+        printf '  %-34s %s\n' "$url" "$what"
+    done
+}
+
 PORT="$SERVE_PORT"
 BIND="0.0.0.0"
 ROOT="out/reports"
@@ -85,7 +95,8 @@ case "$ACTION" in
         if container_running "$SERVE_CONTAINER"; then
             # The port the container is actually published on, not the
             # default: `--status` after `--port 9000` must not print 8000.
-            printf 'serving  %s\n' "$(serve_url "$(serve_running_port)")"
+            printf 'serving on port %s\n' "$(serve_running_port)"
+            print_urls "$(serve_running_port)"
             exit 0
         fi
         printf 'not running. Start it with ./serve.sh\n'
@@ -101,13 +112,12 @@ esac
 # container is removed rather than reported as a conflict.
 remove_container "$SERVE_CONTAINER"
 
-printf 'serving %s\n' "$(serve_url "$PORT")"
-printf '  root     %s (read-only)\n' "$ROOT"
-printf '  bind     %s:%s\n' "$BIND" "$PORT"
+printf 'serving %s (read-only) on port %s, bound to %s\n' "$ROOT" "$PORT" "$BIND"
+print_urls "$PORT"
 if [ "$DETACH" = 1 ]; then
-    printf '  stop     ./serve.sh --stop\n'
+    printf '\nstop with ./serve.sh --stop\n'
 else
-    printf '  stop     Ctrl-C\n'
+    printf '\nstop with Ctrl-C\n'
 fi
 
 # `--bind` is the *host* side of the published port, which is the one that

@@ -223,23 +223,51 @@ remove_container() {
 # --------------------------------------------------------------------------
 # Where a browser on another machine should point.
 #
-# The machine this runs on has no desktop, so the reports are read over the
-# network from somewhere else - which means `localhost` is exactly the wrong
-# answer. This picks the address the host uses to reach the outside world,
-# which on a single-homed box is the one the browser wants. It is a *hint*: a
-# host with several interfaces has several right answers, and the port may be
-# behind a firewall. Both facts are worth printing rather than hiding.
-# --------------------------------------------------------------------------
-serve_host() {
-    local host=""
-    host="$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')"
-    [ -n "$host" ] || host="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    [ -n "$host" ] || host="localhost"
-    printf '%s' "$host"
+# Every address a browser might reach this machine on, one "url<TAB>what it is"
+# per line.
+#
+# This used to guess a single address from the default route. That is right on
+# a single-homed box and wrong the moment there are two NICs, which is not
+# rare - and a wrong guess looks exactly like a broken server, which cost an
+# afternoon. So the choice is handed to the reader instead: interface
+# addresses, then the machine's own name, which is what most people would
+# rather type and the only one that survives the address changing.
+#
+# Never a bind address. `0.0.0.0` means "listen on everything" and is not
+# something anyone can type into a browser; printing it next to a URL, as an
+# earlier version did, reads as though it were one.
+#
+# Container and virtual interfaces are left out. A dozen `br-*` bridges are
+# noise no browser will ever use.
+serve_addresses() {
+    ip -o -4 addr show scope global 2>/dev/null \
+        | awk '{split($4, a, "/"); print $2, a[1]}' \
+        | grep -Ev '^(docker|br-|veth|virbr|cni|podman|kube|flannel|tun|tap|lo)'
 }
 
-serve_url() {
-    printf 'http://%s:%s/' "$(serve_host)" "${1:-$SERVE_PORT}"
+serve_urls() {
+    local port="${1:-$SERVE_PORT}" name="" fqdn=""
+    serve_addresses | while read -r interface address; do
+        printf 'http://%s:%s/\t%s\n' "$address" "$port" "$interface"
+    done
+
+    # The name is a candidate, not a promise: it only works if whatever the
+    # browser asks for DNS resolves it. Said plainly rather than printed as
+    # though it were checked.
+    name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || true)"
+    [ -n "$name" ] && printf 'http://%s:%s/\thostname, if DNS resolves it\n' \
+        "$name" "$port"
+    fqdn="$(hostname -f 2>/dev/null || true)"
+    [ -n "$fqdn" ] && [ "$fqdn" != "$name" ] \
+        && printf 'http://%s:%s/\tFQDN, if DNS resolves it\n' "$fqdn" "$port"
+
+    # On a LAN the bare hostname often does not resolve from another machine
+    # but the mDNS name does, because avahi answers for it. Offered as a
+    # candidate for exactly that case.
+    [ -n "$name" ] && [ "$fqdn" != "$name.local" ] \
+        && printf 'http://%s.local:%s/\tmDNS, if avahi or Bonjour is running\n' \
+            "$name" "$port"
+    return 0
 }
 
 # The port the server is actually published on, which is not necessarily the

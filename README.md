@@ -301,11 +301,17 @@ point a browser at:
 
 ```
 $ ./serve.sh --detach
-serving http://192.168.2.172:8000/
-  root     out/reports (read-only)
-  bind     0.0.0.0:8000
-  stop     ./serve.sh --stop
+serving out/reports (read-only) on port 8000, bound to 0.0.0.0
+  http://192.168.2.172:8000/         eno1
+  http://192.168.2.174:8000/         wlp4s0f0
+  http://neptun03:8000/              hostname, if DNS resolves it
+  http://neptun03.local:8000/        mDNS, if avahi or Bonjour is running
+
+stop with ./serve.sh --stop
 ```
+
+`./serve.sh --status` prints the same list for a server that is already up,
+on the port it is actually published on.
 
 ```bash
 ./serve.sh                 # foreground, Ctrl-C to stop
@@ -315,9 +321,14 @@ serving http://192.168.2.172:8000/
 ./serve.sh --port 9000 --bind 127.0.0.1
 ```
 
-The URL is a **hint**: the address comes from the route the host uses to reach
-the outside world, which is the right answer on a single-homed machine and one
-of several right answers otherwise. The port may also be behind a firewall.
+**Every line is a candidate, not a promise.** Which one works depends on what
+the machine holding the browser can resolve and route to, and this machine
+cannot know that. The name is usually the one worth typing - it survives the
+address changing - but a bare hostname often does not resolve across a LAN
+while the `.local` mDNS name does. The port may also be behind a firewall.
+
+`0.0.0.0` in the first line is the **bind** address: it means the server
+listens on every interface. It is not a URL and nothing can be reached at it.
 
 **If it answers on the host but times out from another machine:**
 
