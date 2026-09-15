@@ -1,5 +1,6 @@
 # Import image. Built outside the air gap, carried in (SPEC 8.1).
-# Same base as the pipeline image; only openpyxl and PyYAML on top.
+# Same base as the pipeline image; only PyYAML on top once the xlsx importer
+# is replaced (SPEC 3) - `csv` is in the standard library.
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -8,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LANG=de_DE.UTF-8 \
     LC_ALL=de_DE.UTF-8
 
-# The source spreadsheet is German: without the locale, umlauts in project
+# The source extracts are German: without the locale, umlauts in project
 # names and German month names come out wrong, and there is no network at
 # runtime to fix it.
 RUN set -eux; \

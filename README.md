@@ -15,6 +15,12 @@ and M5 (PDF + PPTX) complete.** All five output formats come out of one model.
 M6 is not built: there is no offline bundle yet, though the `--network=none`
 pipeline run it depends on has been enforced by `./verify.sh` since M1.
 
+**The import is being rebuilt and is the current work.** The source data is
+several overlapping CSV extracts, not one spreadsheet, so the xlsx import is
+gone — xlsx is an output format here and nothing else. The replacement is
+specified in SPEC §3 and §5.4 and is **not yet built**; what this README
+describes under *Importing* is the target, not what runs today.
+
 ## Requirements
 
 Podman (preferred) or Docker. Nothing else — no Python, no pip on the host.
@@ -27,6 +33,8 @@ Every tool runs in a container.
 ./check.sh tests/fixtures/projects  # validate the fixtures
 ./check.sh --check-schema           # validate the schema and reference files
 ./check.sh                          # validate projects/ - see below
+./merge/merge.sh --key "Projekt-Nr" # step 1: merge/input/*.csv -> merged.csv
+./import/import.sh convert                 # step 2: merged.csv -> projects/ (not built)
 ./snapshot.sh                       # projects/ -> out/tables/*.jsonl
 ./report.sh                         # snapshot + model + all five formats -> out/reports/<date>/
 ./report.sh --lang en               # same, English labels
@@ -37,10 +45,10 @@ Every tool runs in a container.
 The image builds itself on first use.
 
 **`projects/` does not exist yet on a fresh checkout**, so a bare `./check.sh`
-exits 2 and tells you so. It is not part of the repo skeleton: it is produced
-by the importer from the legacy spreadsheet, and the spreadsheet plus a
-hand-edited `import/mapping.yaml` have to exist first (see
-`tools/README-import.md`). Until then, validate `tests/fixtures/projects`.
+exits 2 and tells you so. It is not part of the repo skeleton: it is produced by
+the importer from the CSV extracts, which have to be in `merge/` with a
+hand-edited `import/mapping.yaml` (see *Importing* below). Until then, validate
+`tests/fixtures/projects`.
 
 Exit codes are the contract:
 
@@ -66,6 +74,43 @@ commit, keep a warm container and set `USE_WARM_CONTAINER=1`:
 podman run -d --name continuum-dev --network=none -v "$PWD:/work:z" \
     -w /work "continuum-pipeline:$(cat VERSION)" sleep infinity
 ```
+
+## Importing
+
+The catalogue is bootstrapped from legacy CSV extracts. There is **no xlsx
+import** — several systems each export a CSV, they overlap, and they contradict
+each other. Once `projects/` exists the YAML is the system of record and the
+CSVs are history.
+
+**Two steps, two directories, each with its own README.**
+
+```bash
+./merge/merge.sh --key "Projekt-Nr"   # step 1: merge/input/*.csv -> merged.csv
+cp merge/merged.csv import/merged.csv #         the copy is yours to make
+./import/import.sh profile                   # step 2: -> import/profile.md
+# read profile.md, edit import/mapping.yaml and import/value_map.yaml
+./import/import.sh convert                   # step 2: -> projects/*.yaml
+./check.sh                            # validate what came out
+```
+
+| step | where | what it does |
+|---|---|---|
+| 1 | **[`merge/`](merge/README.md)** | every `*.csv` in `merge/input/` reduced to one `merged.csv`, first wins per cell. Built |
+| 2 | **[`import/`](import/README.md)** | that one file turned into `projects/*.yaml`. Not built yet |
+
+Each directory holds its own tool, tests, fixtures and documentation, so the
+rules live beside the files they govern. The counting rules the merge applies
+are SPEC §5.4; what happens when a CSV contains something the schema has never
+seen is SPEC §3.4.
+
+**The handoff between them is a manual `cp`**, printed as the last line of the
+merge's output. That is the inspection gate: until you run it, step 2 keeps
+reading whatever it read before, so re-cutting an extract cannot change the
+catalogue behind anyone's back. A merge that copied itself onward would be a
+pause, not a gate.
+
+`import/example-extract.csv` is synthetic demo data and
+[`import/README.md`](import/README.md) walks the whole thing through with it.
 
 ## The pipeline
 
@@ -635,6 +680,25 @@ From SPEC §12, still unanswered:
    dict in `pptx.py` and nothing else.
 4. **Report scoping** — one deck, or one per team (changes whether
    `build_model.py` runs once or per team).
+
+4b. **Per-field precedence** (SPEC §12.6) — the merge ranks whole files, one
+   order for every column. Real sources are not like that: an SAP extract is
+   authoritative for ownership while being stale on hardware, and a CMDB dump is
+   the reverse. Not built, deliberately — `merge_conflicts.csv` from a real
+   import is what answers whether it is needed, and building it first means
+   guessing which columns matter.
+
+4c. **Multi-value columns** (SPEC §12.7) — `Datenbank: DB2` in one extract and
+   `Datenbank: Redis` in another is probably not a contradiction, and first-wins
+   throws one away. The merge cannot tell a repeated field from a scalar one and
+   deliberately holds no knowledge of types, so this stays first-wins until a
+   real extract shows which columns need a union.
+
+4d. **Are the source CSVs committed?** (SPEC §12.8) — they are the evidence
+   behind every project file, but may carry contact data, and
+   `_import_manifest.yaml` already records each sha256. Currently gitignored.
+   Decide before the first real extract: removing a file from git history
+   afterwards is a rewrite, not a delete.
 5. **`placement` shape** (§12.4) — no longer blocking: both shapes normalise
    into environment rows, and the site × OS cross-tab counts environments.
 6. ~~**Snapshot retention**~~ — answered: nothing is kept between runs.

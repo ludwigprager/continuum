@@ -1,5 +1,10 @@
 # Column profile: projekte.xlsx
 
+> **Example output from the superseded xlsx importer.** The import is CSV only
+> now and is two steps (SPEC §3): the equivalent of this file is written by
+> `./import/import.sh profile` against `import/merged.csv`. Kept as a worked example
+> of the shape until the replacement lands.
+
 - sheet: `Projektübersicht`
 - header row: 3
 - data rows: 20

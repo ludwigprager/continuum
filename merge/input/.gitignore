@@ -1,0 +1,11 @@
+# The source extracts go here, and EVERY *.csv in this directory is read as one
+# (SPEC 3.1). Nothing is ignored: the results are written one level up, so
+# there is no output down here to exclude and no naming rule to observe.
+#
+# This file exists to keep the directory in git, which does not track empty
+# ones - without it the merge on a fresh clone fails with
+# "no source CSVs in merge/input/" before it can say anything more useful.
+#
+# Whether the extracts themselves are committed is SPEC 12.8 and still open.
+# They are the evidence behind every project file, but may carry contact data,
+# and merge_manifest.json records each one's sha256 either way.

@@ -1,0 +1,23 @@
+Projektübersicht Migration - Stand 03/2026
+
+Projekt-Nr;Anwendungsname;Team;Standort RZ;Klassifizierung A;Klassifizierung B;Datenbank;Sicherheitsklasse;Storage Klasse;Storage (GB);CPU (Kerne);Betriebssystem;Migrationsstrategie;Status;Ansprechpartner;Betriebssystem EOL;Bemerkung;Altspalte
+P-1001;Payment Gateway;Team Gamma;muc-01;CA-2;CB-1;MS-SQL;S1;object;500;;Windows Server 2019;rehost;nicht bewertet;;2027-11-30
+P-1002;Legacy CRM;Team Beta;MUC-01;CA-3;CB-4;MSSQL;S1;Block;500;;SLES 15;retire;nicht bewertet;S. Bauer;30.06.2024;Migration 2023 gestoppt, Lizenzthema
+P-1003;Kundenportal;Team Gamma;FRA-02 ;CA-1;CB-1;db2;S2;block;800 GB;16;Windows Server 2016;Rehost;?;M. Huber;unbekannt;"Hersteller unterstützt keine Container; Support endet 2027"
+P-1004;Fakturierung;Team Delta;BER-01;CA-2;CB-3;"DB2; Redis";S4;object;250;8;Windows Server 2019;retain;nicht bewertet;T. Ludwig;;Abhängigkeit zu Stammdaten, muss danach migriert werden
+P-1005;Lagerverwaltung;Team Gamma;FRA-02 ;CA-2;CB-1;MS-SQL;S4;Block;;8;AIX 7.2;retire;nicht bewertet;M. Huber;unbekannt;-
+P-1006;Reporting Hub;Team Gamma;FRA-02;CA-3;CB-4;"DB2; Redis";S1;block;250;32;Windows Server 2016;rehost;in Arbeit;T. Ludwig;2027-11-30;läuft auf Power-Hardware, ppc64le
+P-1007;Vertragsverwaltung;Team Delta;FRA-02;CA-1;CB-4;Redis;S2;block/object;1200;32;Windows Server 2016;retain;in Arbeit;S. Bauer;31.12.2025;k.A.
+P-1008;Dokumentenarchiv;Team Delta;FRA-02 ;CA-1;CB-2;"DB2; Redis";S4;block/object;250;8;AIX 7.2;Retain;migriert;H. Weber;2027-11-30;"Hersteller unterstützt keine Container; Support endet 2027"
+P-1009;Schadenmeldung;Team Beta;MUC-01;CA-1;CB-2;DB2;S2;block;4000;8 Kerne;SLES 15;replatform;in Arbeit;H. Weber;30.06.2024;Migration 2023 gestoppt, Lizenzthema
+P-1010;Tarifrechner;Team Delta;BER-01;CA-2;CB-3;mssql;S1;block, object;k.A.;32;AIX 7.2;retire;nicht bewertet;;2027-11-30
+P-1011;Provisionsabrechnung;Team Beta;MUC-01;CA-1;CB-4;mssql;S1;object;500;4;Windows Server 2016;replatform;?;M. Huber
+P-1012;Partnerportal;Team Alpha;muc-01;CA-3;CB-4;mssql;S3;object;;32;Windows Server 2016;Rehost;migriert;;2027-11-30;Abhängigkeit zu Stammdaten, muss danach migriert werden
+P-1013;Mahnwesen;Team Gamma;MUC-01;CA-1;CB-1;Redis;S3;block, object;2.500;;Windows Server 2016;retain;?;H. Weber;31.12.2025
+P-1014;Bestandsführung;Team Gamma;MUC-01;CA-3;CB-3;keine;S3;Block;;8 Kerne;Windows Server 2019;refactor;bewertet;T. Ludwig;31.12.2025;"Hersteller unterstützt keine Container; Support endet 2027"
+P-1015;Risikoprüfung;Team Delta;muc-01;CA-1;CB-4;Redis;S1;block;250;32;RHEL 7.9;retain;?;H. Weber;2027-11-30;-
+P-1016;Zahlungsverkehr;Team Gamma;MUC-01;CA-1;CB-1;DB2;S4;Block;;8;AIX 7.2;rehost;migriert;H. Weber;30.06.2024
+P-1017;Stammdaten;Team Delta;muc-01;CA-2;CB-2;MSSQL/Redis;S3;block;k.A.;32;AIX 7.2;Rehost;bewertet;S. Bauer;31.12.2025
+P-1018;Archivierung;Team Beta;BER-01;CA-2;CB-2;"DB2; Redis";S3;Block;2.500;4;Windows Server 2016;Rehost;?;S. Bauer;2027-11-30;"Hersteller unterstützt keine Container; Support endet 2027"
+P-2001;Kundenportal;Team Beta;BER-01;CA-1;CB-2;DB2;S2;object;900;8;AIX 7.2;retain;bewertet
+P-2002;Namenloses Altsystem;;;;;;;;;;;;nicht bewertet;;;keine Doku vorhanden

@@ -1,0 +1,22 @@
+# Step 2 works here. Two kinds of file live in this directory and only one of
+# them is derived (SPEC 3.1). Patterns are anchored with a leading slash so
+# they match only this directory, never a like-named file further down.
+
+# Copied here by hand from merge/merged.csv - see merge/README.md.
+/merged.csv
+
+# Written by ./import.sh profile.
+/profile.md
+/profile.json
+
+# Schema stanzas proposed for a human to apply (SPEC 3.4).
+/proposals.md
+
+# Tracked, and must stay tracked: mapping.yaml and value_map.yaml are
+# hand-edited and are the whole manual step of the import, and id_map.csv is
+# what keeps project ids stable across re-imports. Losing any of them means
+# redoing the mapping or renaming every project.
+#
+# example-extract.csv is tracked too: it is invented demo data, not a real
+# extract, so committing it does not touch SPEC 12.8. README.md walks the
+# import through with it.

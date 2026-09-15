@@ -1,0 +1,5 @@
+Projekt-Nr,Anwendungsname,Standort RZ,CPU (Kerne),Storage (GB),Datenbank
+p-1001,Payment Gateway,muc-01,32,500,Redis
+P-1002,Kundenportal,FRA-02,8,250,MSSQL
+P-1004,Lagerverwaltung,BER-01,2,100,DB2
+,Ohne Nummer,MUC-01,1,50,

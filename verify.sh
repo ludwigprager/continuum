@@ -10,13 +10,14 @@ fail=0
 step() { printf '\n== %s ==\n' "$1"; }
 
 step "shellcheck"
-run_in_container -- shellcheck scripts/lib.sh ./*.sh || fail=1
+run_in_container -- shellcheck -x scripts/lib.sh ./*.sh \
+    merge/merge.sh import/import.sh || fail=1
 
 step "schema self-test"
 run_in_container -- python3 tools/validate.py --schema schema --check-schema || fail=1
 
 step "pytest"
-run_in_container -- python3 -m pytest tests -q -p no:cacheprovider || fail=1
+run_in_container -- python3 -m pytest tests merge/tests -q -p no:cacheprovider || fail=1
 
 step "full pipeline against fixtures, --network=none"
 # SPEC 8.2: the cheapest regression test for the air-gap traps is running

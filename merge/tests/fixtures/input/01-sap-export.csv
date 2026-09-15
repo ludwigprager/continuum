@@ -1,0 +1,5 @@
+Projekt-Nr;Anwendungsname;Team;Standort RZ;CPU (Kerne);Datenbank
+P-1001;Payment Gateway;Team Alpha;MUC-01;16;DB2
+P-1002;Kundenportal;Team Beta;FRA-02;;MSSQL
+P-1003;Fakturierung;Team Gamma;MUC-01;8;
+;Nicht zugeordnet;Team Delta;BER-01;4;Redis

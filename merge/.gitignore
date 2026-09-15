@@ -1,0 +1,11 @@
+# What ./merge.sh writes here, beside it: the results of merging everything in
+# input/. All three are derived and are rebuilt byte-identically by the next
+# run (SPEC 3.1).
+#
+# Anchored with a leading slash so they match ONLY this directory. Without it,
+# `merged.csv` matches at any depth and swallows
+# tests/fixtures/input/merged.csv - the fixture that proves the merge does not
+# read its own output back.
+/merged.csv
+/merge_conflicts.csv
+/merge_manifest.json

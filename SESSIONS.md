@@ -19,9 +19,9 @@ git init
 
 # the work so far
 mkdir -p tools templates schema reports tests/fixtures docker
-cp ~/Downloads/import_xlsx.py tools/
+cp ~/Downloads/import_csv.py tools/
 cp ~/Downloads/make_testdata.py tools/
-cp ~/Downloads/README.md tools/README-import.md
+cp ~/Downloads/README.md import/README-xlsx-legacy.md
 cp ~/Downloads/SPEC.md .
 
 git add -A && git commit -m "importer + handoff"
@@ -50,7 +50,7 @@ Working agreement:
   All container knowledge lives in `scripts/lib.sh` and nowhere else.
 - Podman is the default engine, docker the fallback; `$CONTAINER_ENGINE` overrides.
   `./report.sh` must work on a clean checkout with only a container engine installed.
-- Do not modify tools/import_xlsx.py unless it has a bug.
+- Do not modify tools/import_csv.py or merge/merge_csv.py unless they have a bug.
 - If §12 (open questions) blocks you, ask. Do not invent taxonomy labels.
 EOF
 
@@ -75,7 +75,7 @@ container run. Podman is the default engine, docker the fallback:
       "Bash(./verify.sh:*)",
       "Bash(./report.sh:*)",
       "Bash(./snapshot.sh:*)",
-      "Bash(./import.sh:*)"
+      "Bash(./import/import.sh:*)"
     ]
   }
 }
@@ -86,29 +86,36 @@ root (SPEC §6.5).
 
 ### Real data to build against
 
-`make_testdata.py` generates a synthetic legacy sheet — "make" as in *create*,
-nothing to do with GNU make. Run the importer on it to produce an actual
-`projects/` tree, so Claude Code builds against real data rather than fixtures
-it invented:
+`merge/make_testdata.py` generates several synthetic legacy CSV extracts — "make" as
+in *create*, nothing to do with GNU make. They deliberately overlap, contradict
+each other and leave gaps, which is what the merge exists to resolve. Run the
+importer on them to produce an actual `projects/` tree, so Claude Code builds
+against real data rather than fixtures it invented:
 
 ```bash
-./import.sh testdata                # -> projekte.xlsx (gitignored)
-./import.sh profile projekte.xlsx   # -> import/profile.md, mapping.yaml, value_map.yaml
-# read import/profile.md, then edit import/mapping.yaml and import/value_map.yaml
-./import.sh convert projekte.xlsx   # -> projects/*.yaml
-./check.sh                          # validate what came out
+./shell.sh python3 merge/make_testdata.py   # -> merge/input/*.csv
+./merge/merge.sh --key "Projekt-Nr"   # -> merge/merged.csv + merge_conflicts.csv
+# LOOK AT merge/merged.csv, and at what the merge threw away
+cp merge/merged.csv import/merged.csv # the merge will not do this for you
+./import/import.sh profile             # -> import/{profile.md,mapping.yaml,value_map.yaml}
+# read profile.md, then edit import/mapping.yaml and import/value_map.yaml
+./import/import.sh convert             # -> projects/*.yaml
+./check.sh                      # validate what came out
 ```
 
-The edit between `profile` and `convert` is the manual step, and the only one.
-See `tools/README-import.md`.
+Three manual steps, all deliberate: inspecting `merged.csv`, copying it across, and
+editing the mapping between `profile` and `convert`. See SPEC §3 and
+`import/README-xlsx-legacy.md`.
 
-**`convert` writes into `projects/`.** If you already have project files there,
-send it somewhere else first (`--out`) and diff, rather than discovering what
-it overwrote.
+**`convert` writes into `projects/`.** Existing values win over the CSV
+(SPEC §5.4.2), so it will not overwrite work — but to see what a new extract
+*would* say, send it elsewhere (`--out`) and diff.
 
-Everything runs in a container. The importer has its own image because it
-needs `openpyxl` and `PyYAML`, which the pipeline image deliberately does not
-carry.
+Everything runs in a container. The importer has its own image because it needs
+`PyYAML`, which the pipeline image deliberately does not carry — `ruamel.yaml`
+is the only YAML library there. There is **no xlsx import**: the extracts arrive
+as CSV, so the import image has no `openpyxl` (SPEC §3). xlsx is an output
+format only, written by the pipeline image.
 
 ## First session
 
@@ -211,9 +218,20 @@ deletes the PDF Typst had already written.
 | M4 TXT + PNG | done |
 | M5 PDF + PPTX | done |
 | M6 offline bundle | `--network=none` already enforced by `./verify.sh` |
+| import (CSV) step 1, merge | done |
+| import (CSV) step 2, convert | **current work** |
 
-`import.sh` and `docker/Dockerfile.import` are done too, though they are not a
-milestone of their own.
+`import.sh` and `docker/Dockerfile.import` run in a container and that part
+stands, but the importer itself is being replaced. The source data turned out
+to be several overlapping CSV extracts rather than one spreadsheet, so the xlsx
+path is gone and the import is now two steps with a directory each.
+`./merge/merge.sh` reduces every CSV in `merge/input/` to one `merged.csv` on a join
+key, first-wins per cell, and prints the `cp` that hands it to step 2 — that
+step is **built** and self-contained in `merge/`, with its own README and 21
+tests. `import_csv.py`, which
+converts that single file, is **not**: `./import/import.sh profile|convert` still runs
+the xlsx importer until it is. SPEC §3 is the design, §5.4 the merge contract,
+§10 the acceptance for each step.
 
 Open questions are in SPEC §12. **§12.1** is still live: the taxonomy codes
 have no labels, `taxonomy.yaml` carries `label_de: null` rather than invented

@@ -1,4 +1,15 @@
-# legacy-xlsx-import
+# legacy-xlsx-import — SUPERSEDED
+
+> **This describes the xlsx importer, which is being replaced.** The source data
+> is several overlapping CSV extracts, not one spreadsheet, so there is no xlsx
+> import any more: see SPEC §3 for the two-step CSV design and §5.4 for the
+> merge contract, and the *Importing* section of the top-level `README.md` for
+> how to run it.
+>
+> The file is kept only while `import/import_xlsx.py` is still in the tree, and
+> goes with it. What stays true and is worth reading before rewriting it: the
+> reasoning below on reviewing distinct values rather than rows, and the German
+> number and date traps, which are CSV problems too (SPEC §9).
 
 Turns a legacy "one row per project" spreadsheet into one YAML file per project,
 without needing the target schema to be known up front.
