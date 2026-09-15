@@ -319,6 +319,29 @@ The URL is a **hint**: the address comes from the route the host uses to reach
 the outside world, which is the right answer on a single-homed machine and one
 of several right answers otherwise. The port may also be behind a firewall.
 
+**If it answers on the host but times out from another machine:**
+
+```bash
+CONTAINER_ENGINE=docker ./serve.sh --detach
+```
+
+Rootless podman publishes a port as an ordinary host socket held open by a
+userspace proxy, so it is subject to whatever the host does to incoming
+traffic. Docker installs its own DNAT and accept rules and arrives by a
+different route, so on a host that drops unsolicited inbound traffic the
+docker one is reachable and the podman one is not. A dropped packet times out
+rather than being refused, which is exactly the symptom.
+
+`ss -ltn` shows it: docker binds `0.0.0.0:8000`, rootless podman shows
+`*:8000`. Both answer `curl` **on the host** — that connection never leaves
+the machine, so testing from the host proves nothing here. Only a browser
+elsewhere settles it.
+
+The other fix is opening the port on the host firewall, which needs root and
+is the operator's call. Podman stays the default engine everywhere else
+(SPEC 6.5); this is the documented override for the one entry point that has
+to be reachable from outside.
+
 It is `python3 -m http.server` out of the pipeline image rather than the
 nginx:alpine SPEC 8.3 sketched. The pipeline image is already built, already
 pinned and already carried into the air gap, and Python's server already

@@ -7,6 +7,8 @@
 #   ./serve.sh --stop
 #   ./serve.sh --port 9000
 #   ./serve.sh --bind 127.0.0.1    # loopback only (see below)
+#   CONTAINER_ENGINE=docker ./serve.sh --detach    # when podman's port is
+#                                                  # not reachable - see below
 #
 # The machine that runs the pipeline has no desktop. The xlsx, the PDF, the
 # deck and the PNGs are all files a person has to look at, so something has to
@@ -19,6 +21,26 @@
 # already produces the listing; nginx would be a second image to pin, bundle
 # and checksum for M6 forever, to gain nothing this use needs. If it ever needs
 # to be a real web server, this is the one line that changes.
+#
+# **If the URL answers on the host but times out from another machine, try
+# `CONTAINER_ENGINE=docker ./serve.sh`.** Found the hard way on the first host
+# this ran on. Rootless podman publishes a port as an ordinary socket on the
+# host, held open by a userspace proxy, and it is therefore subject to
+# whatever filters the host applies to incoming traffic. Docker instead
+# installs its own DNAT and accept rules and so arrives by a different route.
+# On a host that drops unsolicited inbound traffic by default, the docker one
+# is reachable and the podman one is not - it times out rather than being
+# refused, which is what a dropped packet looks like.
+#
+# `ss -ltn` shows the difference: docker binds `0.0.0.0:8000`, rootless podman
+# shows `*:8000`. Both answer `curl` *on the host*, because that connection
+# never leaves it - which is why testing from the host proves nothing about
+# this. Only a browser on another machine settles it.
+#
+# The other fix is to open the port on the host firewall, which needs root and
+# is the operator's call, not this script's. SPEC 6.5 keeps podman as the
+# default engine everywhere; this is the documented override for the one entry
+# point that has to be reachable from outside.
 #
 # **There is no authentication and the data is not public.** The listing is
 # read-only - the container mounts out/reports read-only and can see nothing
