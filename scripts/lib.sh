@@ -261,12 +261,10 @@ serve_urls() {
     [ -n "$fqdn" ] && [ "$fqdn" != "$name" ] \
         && printf 'http://%s:%s/\tFQDN, if DNS resolves it\n' "$fqdn" "$port"
 
-    # On a LAN the bare hostname often does not resolve from another machine
-    # but the mDNS name does, because avahi answers for it. Offered as a
-    # candidate for exactly that case.
-    [ -n "$name" ] && [ "$fqdn" != "$name.local" ] \
-        && printf 'http://%s.local:%s/\tmDNS, if avahi or Bonjour is running\n' \
-            "$name" "$port"
+    # No .local line. mDNS was offered here as a candidate for the case where
+    # a bare hostname does not resolve across a LAN, but it needs avahi running
+    # on both ends and was one more line to rule out on a list where every line
+    # already has to be tried. Dropped on request.
     return 0
 }
 
@@ -278,4 +276,62 @@ serve_running_port() {
     port="$("$ENGINE" port "$SERVE_CONTAINER" 2>/dev/null \
             | awk -F: 'NR==1 {print $NF; exit}')"
     printf '%s' "${port:-$SERVE_PORT}"
+}
+
+# --------------------------------------------------------------------------
+# Is anything listening on this TCP port, whoever owns it?
+#
+# Deliberately not "is one of OUR containers on it": the case this exists for
+# is a server this repo started under the *other* engine, which the current
+# engine cannot see at all. Podman then fails to bind with
+# "rootlessport listen tcp 0.0.0.0:8000: bind: address already in use", which
+# reads like a conflict with a stranger rather than with yourself.
+# --------------------------------------------------------------------------
+port_in_use() {
+    local port="$1"
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltn "sport = :$port" 2>/dev/null | grep -q LISTEN
+        return
+    fi
+    # No ss. Connecting proves a listener that accepts; one that binds without
+    # accepting is missed, which is rare enough to live with.
+    (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null || return 1
+    exec 3<&-
+    return 0
+}
+
+# Prints the name of the OTHER engine if our own serve container is running
+# under it, nothing otherwise.
+#
+# This is the common reason the default port is taken, and it matters more than
+# a port clash usually would: the two engines are not interchangeable here. A
+# docker-published port is reachable from other machines, a rootless-podman one
+# generally is not (see serve_addresses above), so quietly moving to the next
+# port hands back a server that works on this host and nowhere else.
+other_engine_serving() {
+    local other=""
+    case "$ENGINE" in
+        podman) other="docker" ;;
+        docker) other="podman" ;;
+        *)      return 1 ;;
+    esac
+    command -v "$other" >/dev/null 2>&1 || return 1
+    "$other" ps --filter "name=^${SERVE_CONTAINER}$" --format '{{.Names}}' 2>/dev/null \
+        | grep -q . || return 1
+    printf '%s' "$other"
+}
+
+# The first free port at or after $1, trying $2 of them (default 20).
+# Prints nothing and returns 1 if they are all taken.
+find_free_port() {
+    local port="$1" tries="${2:-20}" i=0
+    while [ "$i" -lt "$tries" ]; do
+        if ! port_in_use "$port"; then
+            printf '%s' "$port"
+            return 0
+        fi
+        port=$((port + 1))
+        i=$((i + 1))
+    done
+    return 1
 }

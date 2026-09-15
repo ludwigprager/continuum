@@ -5,7 +5,9 @@
 #   ./serve.sh --detach        # background, survives logout
 #   ./serve.sh --status        # is it running, and on what URL
 #   ./serve.sh --stop
-#   ./serve.sh --port 9000
+#   ./serve.sh --port 9000     # exact port; fails if it is taken
+#
+# With no --port it starts at 8000 and moves up to the first free one.
 #   ./serve.sh --bind 127.0.0.1    # loopback only (see below)
 #   CONTAINER_ENGINE=docker ./serve.sh --detach    # when podman's port is
 #                                                  # not reachable - see below
@@ -63,6 +65,7 @@ print_urls() {
 }
 
 PORT="$SERVE_PORT"
+PORT_GIVEN=0
 BIND="0.0.0.0"
 ROOT="out/reports"
 ACTION="start"
@@ -73,7 +76,7 @@ while [ $# -gt 0 ]; do
         --detach|-d)  DETACH=1; shift ;;
         --stop)       ACTION="stop"; shift ;;
         --status)     ACTION="status"; shift ;;
-        --port)       PORT="$2"; shift 2 ;;
+        --port)       PORT="$2"; PORT_GIVEN=1; shift 2 ;;
         --bind)       BIND="$2"; shift 2 ;;
         --root)       ROOT="$2"; shift 2 ;;
         -h|--help)    sed -n '2,10p' "$0"; exit 0 ;;
@@ -111,6 +114,47 @@ esac
 # report has been written and somebody wants the port back - so a stale
 # container is removed rather than reported as a conflict.
 remove_container "$SERVE_CONTAINER"
+
+# Find a free port unless one was asked for by name.
+#
+# The common way to lose 8000 is to have started this yourself under the other
+# engine: a detached docker server survives a logout, and podman then cannot
+# bind a port it cannot see the owner of. Moving up one is nicer than failing,
+# and --status reads the port off the container rather than assuming 8000, so
+# nothing downstream needs to know which one was taken.
+#
+# An explicit --port is a request, not a preference, so it is not second-
+# guessed: if it is taken, that is an error worth stopping for.
+if [ "$PORT_GIVEN" = 1 ]; then
+    if port_in_use "$PORT"; then
+        die "serve.sh: port $PORT is already in use. Pick another with --port, or see what is on it:
+    ss -ltnp | grep :$PORT
+  A server this repo started under the other engine is invisible to this one -
+  try: CONTAINER_ENGINE=docker ./serve.sh --status"
+    fi
+else
+    WANTED="$PORT"
+    PORT="$(find_free_port "$PORT")" \
+        || die "serve.sh: no free port in $WANTED..$((WANTED + 19)). Free one, or pass --port."
+    if [ "$PORT" != "$WANTED" ]; then
+        OTHER="$(other_engine_serving || true)"
+        if [ -n "$OTHER" ]; then
+            # Not a clash with a stranger: it is this repo's own server, under
+            # the engine whose published ports other machines can actually
+            # reach. Moving up would hand back a host-only server, so say what
+            # is going on rather than quietly doing the less useful thing.
+            printf 'port %s is held by %s under %s - this repo'"'"'s own server.\n' \
+                "$WANTED" "$SERVE_CONTAINER" "$OTHER"
+            printf '  It is probably the one you want: a %s-published port is reachable\n' "$OTHER"
+            printf '  from other machines where a rootless podman one often is not.\n\n'
+            printf '      CONTAINER_ENGINE=%s ./serve.sh --status   # its URL\n' "$OTHER"
+            printf '      CONTAINER_ENGINE=%s ./serve.sh --stop     # or take the port back\n\n' "$OTHER"
+            printf '  Starting a second one on %s anyway; it will answer on this host.\n' "$PORT"
+        else
+            printf 'port %s is in use, using %s instead\n' "$WANTED" "$PORT"
+        fi
+    fi
+fi
 
 printf 'serving %s (read-only) on port %s, bound to %s\n' "$ROOT" "$PORT" "$BIND"
 print_urls "$PORT"

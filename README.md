@@ -366,6 +366,41 @@ on the port it is actually published on.
 ./serve.sh --port 9000 --bind 127.0.0.1
 ```
 
+**It finds a free port.** With no `--port` it starts at 8000 and moves up to the
+first one nothing is listening on, saying so:
+
+```
+port 8000 is in use, using 8001 instead
+serving out/reports (read-only) on port 8001, bound to 0.0.0.0
+```
+
+`--status` reads the port off the running container rather than assuming 8000,
+so nothing downstream has to know which one it got.
+
+An explicit `--port` is a request, not a preference: if it is taken, that is an
+error rather than a silent move.
+
+**When the holder is your own server under the other engine, it says so** rather
+than moving up quietly — because the two engines are not interchangeable here:
+
+```
+port 8000 is held by continuum-serve under docker - this repo's own server.
+  It is probably the one you want: a docker-published port is reachable
+  from other machines where a rootless podman one often is not.
+
+      CONTAINER_ENGINE=docker ./serve.sh --status   # its URL
+      CONTAINER_ENGINE=docker ./serve.sh --stop     # or take the port back
+
+  Starting a second one on 8001 anyway; it will answer on this host.
+```
+
+That is the case worth catching. A detached docker server survives a logout,
+podman cannot see it, and silently taking the next port hands back a server that
+answers on the host and times out from everywhere else — the symptom in the
+section below, arrived at by a different road. `--status` and `--stop` are
+engine-scoped for the same reason, so a docker-started server needs
+`CONTAINER_ENGINE=docker ./serve.sh --stop`.
+
 **Every line is a candidate, not a promise.** Which one works depends on what
 the machine holding the browser can resolve and route to, and this machine
 cannot know that. The name is usually the one worth typing - it survives the
@@ -387,6 +422,41 @@ traffic. Docker installs its own DNAT and accept rules and arrives by a
 different route, so on a host that drops unsolicited inbound traffic the
 docker one is reachable and the podman one is not. A dropped packet times out
 rather than being refused, which is exactly the symptom.
+
+**Measured on a host running ufw**, to show how far apart the two are:
+
+```
+$ sudo ufw status verbose
+Default: deny (incoming), allow (outgoing), deny (routed)
+22/tcp        ALLOW IN  Anywhere
+2049/tcp      ALLOW IN  192.168.2.0/24
+...                                       # 8000 is NOT allowed
+```
+
+The docker-published port answered from another machine anyway. The
+podman-published one timed out. Both were serving the same directory out of
+the same image, on the same host, seconds apart.
+
+That is worth knowing beyond this script: **a docker-published port is open
+whatever ufw says.** Docker's rules are hit before ufw's `INPUT` policy
+applies, so `ufw status` does not describe what is actually reachable. If you
+are relying on the host firewall to keep this listing off a network, use
+podman - it is the one that obeys - or bind to loopback and tunnel:
+
+```bash
+./serve.sh --bind 127.0.0.1                        # on the server
+ssh -N -L 8000:127.0.0.1:8000 user@host            # from the other machine
+```
+
+The tunnel needs no root and no firewall change, works under either engine,
+and fixes the "no authentication" problem at the same time, because nothing is
+exposed on the LAN at all.
+
+To open the port properly instead, scoped to the subnet rather than the world:
+
+```bash
+sudo ufw allow from 192.168.2.0/24 to any port 8000 proto tcp
+```
 
 `ss -ltn` shows it: docker binds `0.0.0.0:8000`, rootless podman shows
 `*:8000`. Both answer `curl` **on the host** — that connection never leaves

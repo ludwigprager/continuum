@@ -1,119 +1,97 @@
-# value_map.yaml - normalise the messy values found in the sheet.
+# value_map.yaml - normalise the messy values found in the extract.
 #
-# Keyed by the TARGET path from mapping.yaml (not the column header),
-# so renaming a column header does not invalidate this file.
+# Keyed by the TARGET path from mapping.yaml (not the column header), so
+# renaming a column header does not invalidate this file.
 #
 #   target.path:
-#     "MS-SQL": mssql        # rename
-#     "mssql/db2": [mssql, db2]   # split one cell into several values
-#     "keine": null          # treat as not-set
+#     "MS-SQL": mssql             # rename
+#     "MSSQL/Redis": [mssql, redis]   # split one cell into several values
+#     "keine": null               # treat as not-set
 #
-# Values not listed here are passed through unchanged (and counted in
-# import-report.md so you can see what you have not normalised yet).
+# Values not listed here pass through unchanged, and are counted in
+# import-report.md so you can see what you have not normalised yet.
+#
+# ---------------------------------------------------------------------------
+# The rule that matters: the RIGHT-hand side must be a code that already exists
+# in schema/taxonomy.yaml (or sites.yaml / teams.yaml for x-ref fields). This
+# file translates the source system's spelling into the catalogue's vocabulary;
+# it does not invent vocabulary.
+#
+# `profile` writes a starter version that slugifies everything - "CA-1": ca_1.
+# That is wrong here and would fail validation: CA-1 is already the code, and
+# ca_1 is not in the taxonomy. Where the source already speaks the vocabulary,
+# the right edit is to delete the line.
+# ---------------------------------------------------------------------------
 
 values:
-  # --- Team  (4 distinct) ---
-  team:
-    "Team Gamma": team_gamma   # 7x
-    "Team Delta": team_delta   # 6x
-    "Team Beta": team_beta   # 5x
-    "Team Alpha": team_alpha   # 1x
+  # --- ownership.team_id -> teams.yaml ---------------------------------------
+  ownership.team_id:
+    "Team Alpha": team-alpha
+    "Team Beta": team-beta
+    "Team Gamma": team-gamma
+    "Team Delta": team-delta
 
-  # --- Standort RZ  (4 distinct) ---
-  # 1 value(s) appear in several spellings
-  standort_rz:
-    "MUC-01": muc_01   # 6x, also spelled: 'muc-01'
-    "FRA-02": fra_02   # 5x
-    "BER-01": ber_01   # 4x
-    "muc-01": muc_01   # 4x, also spelled: 'MUC-01'
+  # --- datacenter -> sites.yaml ----------------------------------------------
+  # The extract spells one site two ways. Both are the same datacenter; the
+  # merge reports such disagreements between files, and this is where the
+  # decision that they mean the same thing is recorded (SPEC 5.4 rule 5).
+  placement.environments[].datacenter:
+    "MUC-01": muc-01
+    "muc-01": muc-01
+    "FRA-02": fra-02
+    "BER-01": ber-01
 
-  # --- Klassifizierung A  (3 distinct) ---
-  klassifizierung_a:
-    "CA-1": ca_1   # 9x
-    "CA-2": ca_2   # 6x
-    "CA-3": ca_3   # 4x
+  # --- datastores -> taxonomy group 'engine' ---------------------------------
+  # Four spellings of one engine, and two cells that hold two engines each.
+  # A list value splits the cell into separate datastore rows, which is what
+  # makes "how many projects have DB2" countable.
+  datastores[].engine:
+    "MS-SQL": mssql
+    "MSSQL": mssql
+    "mssql": mssql
+    "DB2": db2
+    "db2": db2
+    "Redis": redis
+    "MSSQL/Redis": [mssql, redis]
+    "DB2; Redis": [db2, redis]
+    "keine": none          # the taxonomy code for "no datastore", not null:
+                           # "this project has none" is an answer, and null
+                           # would read as "nobody asked" (SPEC 5.1)
 
-  # --- Klassifizierung B  (4 distinct) ---
-  klassifizierung_b:
-    "CB-4": cb_4   # 6x
-    "CB-1": cb_1   # 5x
-    "CB-2": cb_2   # 5x
-    "CB-3": cb_3   # 3x
+  # --- storage classes -> taxonomy group 'storage_class' ---------------------
+  platform.storage_classes[]:
+    "Block": block
+    "block": block
+    "object": object
+    "block, object": [block, object]
+    "block/object": [block, object]
 
-  # --- Datenbank  (8 distinct) ---
-  # other separator(s) also appear in this column: '/'. Those cells are NOT split - map them explicitly in value_map.yaml, e.g. "MSSQL/Redis": [mssql, redis]
-  # 2 value(s) appear in several spellings
-  datenbank:
-    "DB2": db2   # 7x, also spelled: 'db2'
-    "Redis": redis   # 7x
-    "mssql": mssql   # 3x, also spelled: 'MS-SQL', 'MSSQL'
-    "MS-SQL": mssql   # 2x, also spelled: 'MSSQL', 'mssql'
-    "MSSQL": mssql   # 1x, also spelled: 'MS-SQL', 'mssql'
-    "MSSQL/Redis": mssql_redis   # 1x
-    "db2": db2   # 1x, also spelled: 'DB2'
-    "keine": null   # 1x, treated as not set
+  # --- OS family -> taxonomy group 'os_family' -------------------------------
+  # The cell carries family and version ("RHEL 7.9"); only the family is a
+  # code. The version is dropped rather than parsed - see mapping.yaml.
+  placement.environments[].os.family:
+    "Windows Server 2016": windows
+    "Windows Server 2019": windows
+    "RHEL 7.9": rhel
+    "SLES 15": sles
+    "AIX 7.2": aix
 
-  # --- Sicherheitsklasse  (4 distinct) ---
-  sicherheitsklasse:
-    "S1": s1   # 6x
-    "S3": s3   # 5x
-    "S2": s2   # 4x
-    "S4": s4   # 4x
+  # --- migration.strategy -> taxonomy group 'migration_strategy' -------------
+  # Already the right vocabulary apart from capitalisation.
+  migration.strategy:
+    "Rehost": rehost
+    "Retain": retain
 
-  # --- Storage Klasse  (5 distinct) ---
-  # 2 value(s) appear in several spellings
-  storage_klasse:
-    "Block": block   # 5x, also spelled: 'block'
-    "block": block   # 5x, also spelled: 'Block'
-    "object": object   # 5x
-    "block, object": block_object   # 2x, also spelled: 'block/object'
-    "block/object": block_object   # 2x, also spelled: 'block, object'
+  # --- migration.status -> taxonomy group 'migration_status' -----------------
+  # German source, English codes.
+  migration.status:
+    "nicht bewertet": not_assessed
+    "bewertet": assessed
+    "in Arbeit": in_progress
+    "migriert": migrated
+    "?": unknown           # an explicit unknown, not a dropped row (SPEC 11)
 
-  # --- Betriebssystem  (5 distinct) ---
-  # possibly the same: 'Windows Server 2019' / 'Windows Server 2016'
-  betriebssystem:
-    "Windows Server 2016": windows_server_2016   # 7x
-    "AIX 7.2": aix_7_2   # 6x
-    "Windows Server 2019": windows_server_2019   # 3x
-    "SLES 15": sles_15   # 2x
-    "RHEL 7.9": rhel_7_9   # 1x
-
-  # --- Migrationsstrategie  (7 distinct) ---
-  # 2 value(s) appear in several spellings
-  migrationsstrategie:
-    "retain": retain   # 5x, also spelled: 'Retain'
-    "Rehost": rehost   # 4x, also spelled: 'rehost'
-    "rehost": rehost   # 3x, also spelled: 'Rehost'
-    "retire": retire   # 3x
-    "replatform": replatform   # 2x
-    "Retain": retain   # 1x, also spelled: 'retain'
-    "refactor": refactor   # 1x
-
-  # --- Status  (4 distinct) ---
-  status:
-    "nicht bewertet": nicht_bewertet   # 6x
-    "bewertet": bewertet   # 3x
-    "in Arbeit": in_arbeit   # 3x
-    "migriert": migriert   # 3x
-
-  # --- Ansprechpartner  (4 distinct) ---
-  ansprechpartner:
-    "H. Weber": h_weber   # 5x
-    "S. Bauer": s_bauer   # 4x
-    "M. Huber": m_huber   # 3x
-    "T. Ludwig": t_ludwig   # 3x
-
-  # --- Bemerkung  (5 distinct) ---
-  bemerkung:
-    "Hersteller unterstützt keine Container; Support endet 2027": hersteller_unterstuetzt_keine_container_support_endet_2027   # 4x
-    "Abhängigkeit zu Stammdaten, muss danach migriert werden": abhaengigkeit_zu_stammdaten_muss_danach_migriert_werden   # 2x
-    "Migration 2023 gestoppt, Lizenzthema": migration_2023_gestoppt_lizenzthema   # 2x
-    "keine Doku vorhanden": keine_doku_vorhanden   # 1x
-    "läuft auf Power-Hardware, ppc64le": laeuft_auf_power_hardware_ppc64le   # 1x
-
-
-# Not listed above (too many distinct values to be a code list -
-# these look like identifiers or free text). Add a block by hand if
-# one of them really is an enum:
-#   - Projekt-Nr (20 distinct / 20 filled)
-#   - Anwendungsname (19 distinct / 20 filled)
+  # --- classification.* and security_class -----------------------------------
+  # Nothing here on purpose. CA-1, CB-3, S2 are already the taxonomy's own
+  # codes, so they pass through untouched. The starter file had a line for
+  # each, slugifying them into codes that do not exist.

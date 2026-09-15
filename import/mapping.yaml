@@ -1,4 +1,4 @@
-# mapping.yaml - one entry per spreadsheet column.
+# mapping.yaml - one entry per column of import/merged.csv.
 #
 #   "<exact column header>": <target path in the project YAML>
 #
@@ -9,49 +9,62 @@
 #   a.b[0].c       explicit list index
 #   null           leave in _unmapped (the default for anything you delete)
 #
-# Columns you do not map are NOT lost: they are written to _unmapped
-# in each project file, so you can promote them later.
+# Columns you do not map are NOT lost: they are written to _unmapped in each
+# project file, so you can promote them later.
 #
-# Generated 2026-09-14 - edit freely, this file is the spec.
+# ---------------------------------------------------------------------------
+# THIS IS THE ONE FILE YOU EDIT BY HAND, and it is specific to YOUR columns.
+#
+# `./import/import.sh profile` writes a starter version of it with every column
+# listed and a slugified guess beside each - `"Datenbank": datenbank`. That
+# guess is a placeholder, not an answer: it puts a German column name at the
+# root of the file, where the schema has no such field, and validation fails
+# with "unknown field". Editing each line to a real schema path is the work.
+#
+# What is below is the worked answer for the demo extract. Real extracts will
+# have different headers; copy the SHAPE, not the left-hand side. Valid paths
+# come from schema/project.schema.yaml - that file is the list of what exists.
+# ---------------------------------------------------------------------------
 
 # id column (detected): Projekt-Nr
 
-# group column (detected): Team
-
 columns:
-  # kind=enum fill=100% distinct=20
-  "Projekt-Nr": projekt_nr
-  # kind=enum fill=100% distinct=19
-  "Anwendungsname": anwendungsname
-  # kind=enum fill=95% distinct=4
-  "Team": team
-  # kind=enum fill=95% distinct=4
-  "Standort RZ": standort_rz
-  # kind=enum fill=95% distinct=3
-  "Klassifizierung A": klassifizierung_a
-  # kind=enum fill=95% distinct=4
-  "Klassifizierung B": klassifizierung_b
-  # kind=list sep=';' fill=95% distinct=8
-  "Datenbank": datenbank
-  # kind=enum fill=95% distinct=4
-  "Sicherheitsklasse": sicherheitsklasse
-  # kind=enum fill=95% distinct=5
-  "Storage Klasse": storage_klasse
-  # kind=integer unit=gb fill=65% distinct=7
-  "Storage (GB)": storage_gb
-  # kind=integer unit=kerne fill=80% distinct=5
-  "CPU (Kerne)": cpu_kerne
-  # kind=enum fill=95% distinct=5
-  "Betriebssystem": betriebssystem
-  # kind=enum fill=95% distinct=7
-  "Migrationsstrategie": migrationsstrategie
-  # kind=enum fill=75% distinct=4
-  "Status": status
-  # kind=enum fill=75% distinct=4
-  "Ansprechpartner": ansprechpartner
-  # kind=date fill=70% distinct=3
-  "Betriebssystem EOL": betriebssystem_eol
-  # kind=enum fill=50% distinct=5
-  "Bemerkung": bemerkung
-  # kind=empty fill=0% distinct=0
-  "Altspalte": null    # empty in this export
+  # The id column. It becomes the project id and the filename, so it does not
+  # also need a field of its own - but keep it out of _unmapped, where it would
+  # be duplicated into every file for nothing.
+  "Projekt-Nr": null
+
+  "Anwendungsname": name
+  "Team": ownership.team_id                         # x-ref: teams
+  "Standort RZ": placement.environments[].datacenter  # x-ref: sites
+
+  "Klassifizierung A": classification.classification_a
+  "Klassifizierung B": classification.classification_b
+  "Sicherheitsklasse": classification.security_class
+
+  # One cell can hold several engines ("DB2; Redis"), and the importer splits
+  # on the separator it detected. [] makes each token its own datastore row,
+  # which is the grain the report counts at.
+  "Datenbank": datastores[].engine
+
+  "Storage Klasse": platform.storage_classes[]
+  "Storage (GB)": platform.storage_gb               # unit 'GB' stripped
+  "CPU (Kerne)": platform.cpu_cores
+
+  # The OS column carries family and version together ("Windows Server 2019").
+  # Only the family is mapped: value_map.yaml reduces the whole string to a
+  # taxonomy code, and the version is not recoverable from it reliably enough
+  # to be worth inventing a field for.
+  "Betriebssystem": placement.environments[].os.family
+  "Betriebssystem EOL": placement.environments[].os.eol
+
+  "Migrationsstrategie": migration.strategy
+  "Status": migration.status
+
+  # Deliberately unmapped -> _unmapped. Free text with no field to go in, and
+  # a contact name that has no business in a catalogue every team can read.
+  # Promoting either is one line here plus one field in the schema.
+  "Ansprechpartner": null
+  "Bemerkung": null
+
+  "Altspalte": null    # empty in every row of this export

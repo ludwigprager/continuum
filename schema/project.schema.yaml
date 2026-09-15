@@ -50,7 +50,7 @@ description: >-
   missing means unknown, never zero (SPEC 5.1).
 
 type: object
-required: [schema_version, id, my_mandatory_field]
+required: [schema_version, id]
 additionalProperties: false
 
 properties:
@@ -88,6 +88,13 @@ properties:
   # submit anything at all - which is how data stops reaching you (SPEC 2).
   # Note also that `required:` at the ROOT is the only unconditional kind:
   # inside a block it only applies when that block is present.
+  #
+  # This field WAS in `required:` and has been taken out, which is itself the
+  # lesson: no extract can supply it, so every bootstrap import produced 20
+  # files and 20 errors, and `./check.sh` could never pass on freshly imported
+  # data. A mandatory field has to be one the source systems actually carry,
+  # or one somebody fills in by hand for every project before validation runs
+  # again. Put a name back in `required:` above when you have such a field.
   my_mandatory_field:
     $ref: '#/$defs/text'
     x-tracked: true
