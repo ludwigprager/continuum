@@ -1,0 +1,57 @@
+# mapping.yaml - one entry per spreadsheet column.
+#
+#   "<exact column header>": <target path in the project YAML>
+#
+# Target path syntax:
+#   a.b.c          nested scalar          -> a: {b: {c: value}}
+#   a.b[]          list of scalars        -> a: {b: [v1, v2]}
+#   a.b[].c        list of objects        -> a: {b: [{c: v1}, {c: v2}]}
+#   a.b[0].c       explicit list index
+#   null           leave in _unmapped (the default for anything you delete)
+#
+# Columns you do not map are NOT lost: they are written to _unmapped
+# in each project file, so you can promote them later.
+#
+# Generated 2026-09-14 - edit freely, this file is the spec.
+
+# id column (detected): Projekt-Nr
+
+# group column (detected): Team
+
+columns:
+  # kind=enum fill=100% distinct=20
+  "Projekt-Nr": projekt_nr
+  # kind=enum fill=100% distinct=19
+  "Anwendungsname": anwendungsname
+  # kind=enum fill=95% distinct=4
+  "Team": team
+  # kind=enum fill=95% distinct=4
+  "Standort RZ": standort_rz
+  # kind=enum fill=95% distinct=3
+  "Klassifizierung A": klassifizierung_a
+  # kind=enum fill=95% distinct=4
+  "Klassifizierung B": klassifizierung_b
+  # kind=list sep=';' fill=95% distinct=8
+  "Datenbank": datenbank
+  # kind=enum fill=95% distinct=4
+  "Sicherheitsklasse": sicherheitsklasse
+  # kind=enum fill=95% distinct=5
+  "Storage Klasse": storage_klasse
+  # kind=integer unit=gb fill=65% distinct=7
+  "Storage (GB)": storage_gb
+  # kind=integer unit=kerne fill=80% distinct=5
+  "CPU (Kerne)": cpu_kerne
+  # kind=enum fill=95% distinct=5
+  "Betriebssystem": betriebssystem
+  # kind=enum fill=95% distinct=7
+  "Migrationsstrategie": migrationsstrategie
+  # kind=enum fill=75% distinct=4
+  "Status": status
+  # kind=enum fill=75% distinct=4
+  "Ansprechpartner": ansprechpartner
+  # kind=date fill=70% distinct=3
+  "Betriebssystem EOL": betriebssystem_eol
+  # kind=enum fill=50% distinct=5
+  "Bemerkung": bemerkung
+  # kind=empty fill=0% distinct=0
+  "Altspalte": null    # empty in this export

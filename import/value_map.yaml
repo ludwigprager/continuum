@@ -1,0 +1,119 @@
+# value_map.yaml - normalise the messy values found in the sheet.
+#
+# Keyed by the TARGET path from mapping.yaml (not the column header),
+# so renaming a column header does not invalidate this file.
+#
+#   target.path:
+#     "MS-SQL": mssql        # rename
+#     "mssql/db2": [mssql, db2]   # split one cell into several values
+#     "keine": null          # treat as not-set
+#
+# Values not listed here are passed through unchanged (and counted in
+# import-report.md so you can see what you have not normalised yet).
+
+values:
+  # --- Team  (4 distinct) ---
+  team:
+    "Team Gamma": team_gamma   # 7x
+    "Team Delta": team_delta   # 6x
+    "Team Beta": team_beta   # 5x
+    "Team Alpha": team_alpha   # 1x
+
+  # --- Standort RZ  (4 distinct) ---
+  # 1 value(s) appear in several spellings
+  standort_rz:
+    "MUC-01": muc_01   # 6x, also spelled: 'muc-01'
+    "FRA-02": fra_02   # 5x
+    "BER-01": ber_01   # 4x
+    "muc-01": muc_01   # 4x, also spelled: 'MUC-01'
+
+  # --- Klassifizierung A  (3 distinct) ---
+  klassifizierung_a:
+    "CA-1": ca_1   # 9x
+    "CA-2": ca_2   # 6x
+    "CA-3": ca_3   # 4x
+
+  # --- Klassifizierung B  (4 distinct) ---
+  klassifizierung_b:
+    "CB-4": cb_4   # 6x
+    "CB-1": cb_1   # 5x
+    "CB-2": cb_2   # 5x
+    "CB-3": cb_3   # 3x
+
+  # --- Datenbank  (8 distinct) ---
+  # other separator(s) also appear in this column: '/'. Those cells are NOT split - map them explicitly in value_map.yaml, e.g. "MSSQL/Redis": [mssql, redis]
+  # 2 value(s) appear in several spellings
+  datenbank:
+    "DB2": db2   # 7x, also spelled: 'db2'
+    "Redis": redis   # 7x
+    "mssql": mssql   # 3x, also spelled: 'MS-SQL', 'MSSQL'
+    "MS-SQL": mssql   # 2x, also spelled: 'MSSQL', 'mssql'
+    "MSSQL": mssql   # 1x, also spelled: 'MS-SQL', 'mssql'
+    "MSSQL/Redis": mssql_redis   # 1x
+    "db2": db2   # 1x, also spelled: 'DB2'
+    "keine": null   # 1x, treated as not set
+
+  # --- Sicherheitsklasse  (4 distinct) ---
+  sicherheitsklasse:
+    "S1": s1   # 6x
+    "S3": s3   # 5x
+    "S2": s2   # 4x
+    "S4": s4   # 4x
+
+  # --- Storage Klasse  (5 distinct) ---
+  # 2 value(s) appear in several spellings
+  storage_klasse:
+    "Block": block   # 5x, also spelled: 'block'
+    "block": block   # 5x, also spelled: 'Block'
+    "object": object   # 5x
+    "block, object": block_object   # 2x, also spelled: 'block/object'
+    "block/object": block_object   # 2x, also spelled: 'block, object'
+
+  # --- Betriebssystem  (5 distinct) ---
+  # possibly the same: 'Windows Server 2019' / 'Windows Server 2016'
+  betriebssystem:
+    "Windows Server 2016": windows_server_2016   # 7x
+    "AIX 7.2": aix_7_2   # 6x
+    "Windows Server 2019": windows_server_2019   # 3x
+    "SLES 15": sles_15   # 2x
+    "RHEL 7.9": rhel_7_9   # 1x
+
+  # --- Migrationsstrategie  (7 distinct) ---
+  # 2 value(s) appear in several spellings
+  migrationsstrategie:
+    "retain": retain   # 5x, also spelled: 'Retain'
+    "Rehost": rehost   # 4x, also spelled: 'rehost'
+    "rehost": rehost   # 3x, also spelled: 'Rehost'
+    "retire": retire   # 3x
+    "replatform": replatform   # 2x
+    "Retain": retain   # 1x, also spelled: 'retain'
+    "refactor": refactor   # 1x
+
+  # --- Status  (4 distinct) ---
+  status:
+    "nicht bewertet": nicht_bewertet   # 6x
+    "bewertet": bewertet   # 3x
+    "in Arbeit": in_arbeit   # 3x
+    "migriert": migriert   # 3x
+
+  # --- Ansprechpartner  (4 distinct) ---
+  ansprechpartner:
+    "H. Weber": h_weber   # 5x
+    "S. Bauer": s_bauer   # 4x
+    "M. Huber": m_huber   # 3x
+    "T. Ludwig": t_ludwig   # 3x
+
+  # --- Bemerkung  (5 distinct) ---
+  bemerkung:
+    "Hersteller unterstützt keine Container; Support endet 2027": hersteller_unterstuetzt_keine_container_support_endet_2027   # 4x
+    "Abhängigkeit zu Stammdaten, muss danach migriert werden": abhaengigkeit_zu_stammdaten_muss_danach_migriert_werden   # 2x
+    "Migration 2023 gestoppt, Lizenzthema": migration_2023_gestoppt_lizenzthema   # 2x
+    "keine Doku vorhanden": keine_doku_vorhanden   # 1x
+    "läuft auf Power-Hardware, ppc64le": laeuft_auf_power_hardware_ppc64le   # 1x
+
+
+# Not listed above (too many distinct values to be a code list -
+# these look like identifiers or free text). Add a block by hand if
+# one of them really is an enum:
+#   - Projekt-Nr (20 distinct / 20 filled)
+#   - Anwendungsname (19 distinct / 20 filled)
