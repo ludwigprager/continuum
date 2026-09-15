@@ -457,9 +457,16 @@ that `ls` shows you what can be run:
 ./check.sh       # validate.py, exits non-zero on invalid data
 ./snapshot.sh    # flatten projects/ into out/tables/*.jsonl
 ./report.sh      # full pipeline -> out/reports/<date>/
+./serve.sh       # HTTP directory listing of out/reports, for a browser
 ./verify.sh      # tests + a --network=none pipeline run against tests/fixtures
 ./shell.sh       # interactive shell in the pipeline image
 ```
+
+`./serve.sh` is the exception to "nothing needs the network": the machine that
+runs the pipeline has no desktop, so the only way to look at an xlsx or a PNG
+is to open it from a browser elsewhere. It publishes a port, mounts
+`out/reports` read-only and nothing else, and `./report.sh` ends by printing
+the URL. There is no authentication - see `--bind`.
 
 Each script is a few lines: source `scripts/lib.sh`, call `run_in_container`.
 **All container knowledge lives in `scripts/lib.sh`** — engine detection, mount
@@ -580,7 +587,7 @@ services:
   check:     # validate.py
   report:    # full pipeline: snapshot -> model -> renderers
   shell:     # interactive, for debugging
-  serve:     # profile: serve  - nginx:alpine over ./out/reports, read-only
+  serve:     # profile: serve  - directory listing over ./out/reports, read-only
   scheduler: # profile: schedule - supercronic running `report` daily
 ```
 
@@ -593,6 +600,14 @@ services:
   cheapest possible regression test for §8.2.
 - MinIO is **optional**, behind a `storage` profile. Default is the bind mount.
   Do not make object storage a prerequisite for a first run.
+
+**Revised: `serve` is the pipeline image, not nginx:alpine.** The entry point
+is `./serve.sh` (6.5) and the compose service mirrors it. `python3 -m
+http.server` over `out/reports` produces the directory listing this needs, out
+of an image that is already built, already pinned and already carried in;
+nginx would be a second image to pin, bundle and checksum in the M6 offline
+bundle forever, for nothing this use asks for. It is one line in `serve.sh` if
+that stops being true.
 
 ### 8.4 Scheduling
 

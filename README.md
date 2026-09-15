@@ -30,6 +30,7 @@ Every tool runs in a container.
 ./snapshot.sh                       # projects/ -> out/tables/*.jsonl
 ./report.sh                         # snapshot + model + all five formats -> out/reports/<date>/
 ./report.sh --lang en               # same, English labels
+./serve.sh --detach                 # browse out/reports from another machine
 ./shell.sh                          # interactive shell in the pipeline image
 ```
 
@@ -290,6 +291,57 @@ much longer project name moves no column at all.
 
 The template is `templates/report.txt.j2`, rendered with `StrictUndefined` -
 a typo in the template is an error rather than a section that quietly leaves.
+
+### Looking at the reports
+
+The machine that runs the pipeline has no desktop, and the xlsx, the PDF, the
+deck and the PNGs are all files somebody has to actually open. `./serve.sh`
+puts a directory listing of `out/reports` on a port, and `./report.sh` ends by
+printing the URL to point a browser at:
+
+```
+report: out/reports/2026-09-15
+  open  http://192.168.2.172:8000/2026-09-15/
+        nothing is serving that yet: ./serve.sh --detach
+```
+
+```bash
+./serve.sh                 # foreground, Ctrl-C to stop
+./serve.sh --detach        # background, survives logout
+./serve.sh --status        # running? on what URL?
+./serve.sh --stop
+./serve.sh --port 9000 --bind 127.0.0.1
+```
+
+The URL is a **hint**: the address comes from the route the host uses to reach
+the outside world, which is the right answer on a single-homed machine and one
+of several right answers otherwise. The port may also be behind a firewall.
+
+It is `python3 -m http.server` out of the pipeline image rather than the
+nginx:alpine SPEC 8.3 sketched. The pipeline image is already built, already
+pinned and already carried into the air gap, and Python's server already
+produces the listing; nginx would be a second image to pin, bundle and
+checksum for M6 forever, to gain nothing this use needs. If it ever has to be
+a real web server, `serve.sh` is the one line that changes.
+
+Two things to know before pointing anyone at it:
+
+- **There is no authentication.** Anyone who can reach the port can read every
+  report. That is the intent on a trusted internal network and the wrong thing
+  anywhere else - use `--bind 127.0.0.1` and an ssh tunnel when the network is
+  not trusted.
+- **It is read-only, and it can see almost nothing.** The container mounts
+  `out/reports` and nothing else, read-only: not `projects/`, not `schema/`.
+  The one container here that listens on a network is the one that should be
+  able to see the least.
+
+`xlsx` and `pptx` arrive as `application/octet-stream`, so a browser downloads
+them rather than trying to display them - which is what you want, since they
+are opened in Excel and PowerPoint. The PDF, the PNGs and `report.txt` render
+in the browser.
+
+`docker compose --profile serve up -d serve` is the same thing for people who
+prefer compose.
 
 ### Counting rules
 

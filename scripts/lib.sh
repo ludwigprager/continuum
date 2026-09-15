@@ -35,6 +35,11 @@ use_import_image() {
 # Name of the optional warm container used by the pre-commit hook.
 DEV_CONTAINER="${DEV_CONTAINER:-continuum-dev}"
 
+# The report server (./serve.sh). Named so it can be found and stopped again,
+# and so ./report.sh can say whether the URL it prints is live.
+SERVE_CONTAINER="${SERVE_CONTAINER:-continuum-serve}"
+SERVE_PORT="${SERVE_PORT:-8000}"
+
 # Exit codes (SPEC 5.3): 0 ok, 1 invalid data, 2 tool/usage error.
 readonly EXIT_TOOL=2
 
@@ -101,27 +106,48 @@ image_digest() {
 }
 
 # --------------------------------------------------------------------------
-# run_in_container [--rw] [--network NET] -- command...
+# run_in_container [--rw] [--network NET] [--publish SPEC] [--source DIR]
+#                  [--name NAME] [--detach] -- command...
 #
-#   --rw         mount the repo read-write (default: read-only)
-#   --network    default "none"; nothing in the daily pipeline may need the net
+#   --rw         mount the source read-write (default: read-only)
+#   --network    default "none"; nothing in the daily pipeline may need the
+#                net. "default" leaves the engine's own networking alone,
+#                which is what publishing a port needs.
+#   --publish    publish a port, e.g. 0.0.0.0:8000:8000 (see serve.sh)
+#   --source     what to bind at /work. Default the repo root; the report
+#                server passes out/reports, so the one container here that
+#                listens on a network cannot read projects/ or schema/.
+#   --name       name the container so it can be found and stopped again
+#   --detach     start it in the background and return
 #
 # Propagates the command's exit code verbatim, EXCEPT 125-127, which mean the
 # runtime itself failed. Those become 2, so CI can never mistake an infra
 # failure for a data verdict.
 # --------------------------------------------------------------------------
 run_in_container() {
-    local mount_mode="ro" network="none" interactive=0
+    local mount_mode="ro" network="none" interactive=0 detach=0
+    local source_dir="$REPO_ROOT" publish="" name=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --rw)       mount_mode="rw"; shift ;;
             --network)  network="$2"; shift 2 ;;
+            --publish)  publish="$2"; shift 2 ;;
+            --source)   source_dir="$2"; shift 2 ;;
+            --name)     name="$2"; shift 2 ;;
+            --detach)   detach=1; shift ;;
             --interactive) interactive=1; shift ;;
             --)         shift; break ;;
             *)          die "run_in_container: unexpected argument '$1'" ;;
         esac
     done
     [ $# -gt 0 ] || die "run_in_container: no command given"
+    [ -d "$source_dir" ] || die "run_in_container: --source $source_dir does not exist"
+
+    # A published port on a container with no network publishes nothing, and
+    # does so silently. There is only one thing the caller can mean.
+    if [ -n "$publish" ] && [ "$network" = "none" ]; then
+        network="default"
+    fi
 
     ensure_image
 
@@ -130,8 +156,23 @@ run_in_container() {
         tty_args=(-it)
     fi
 
+    # Options that describe a *new* container: the warm-container fast path
+    # cannot honour any of them, so it is skipped rather than quietly
+    # ignoring the port or the mount the caller asked for.
+    local -a extra_args=()
+    [ -n "$publish" ] && extra_args+=(--publish "$publish")
+    [ -n "$name" ] && extra_args+=(--name "$name")
+    if [ "$network" != "default" ]; then
+        extra_args+=(--network="$network")
+    fi
+    if [ "$detach" = 1 ]; then
+        extra_args+=(--detach)
+    else
+        extra_args+=(--rm)
+    fi
+
     local rc=0
-    if warm_container_running; then
+    if [ -z "$publish$name" ] && [ "$detach" = 0 ] && warm_container_running; then
         # Fast path for the pre-commit hook: exec into an already-running
         # container instead of paying container startup on every commit.
         set +e
@@ -142,10 +183,9 @@ run_in_container() {
         # ':z' relabels the mount for SELinux. Required on RHEL/Fedora,
         # ignored elsewhere, harmless everywhere.
         set +e
-        "$ENGINE" run --rm "${tty_args[@]}" \
+        "$ENGINE" run "${extra_args[@]}" "${tty_args[@]}" \
             "$(engine_user_args)" \
-            --network="$network" \
-            --volume "$REPO_ROOT:/work:${mount_mode},z" \
+            --volume "$source_dir:/work:${mount_mode},z" \
             --workdir /work \
             "$IMAGE_REF" "$@"
         rc=$?
@@ -164,8 +204,50 @@ run_in_container() {
 
 warm_container_running() {
     [ "${USE_WARM_CONTAINER:-0}" = "1" ] || return 1
+    container_running "$DEV_CONTAINER"
+}
+
+container_running() {
     local state
-    state="$("$ENGINE" container inspect "$DEV_CONTAINER" \
+    state="$("$ENGINE" container inspect "$1" \
         --format '{{.State.Running}}' 2>/dev/null)" || return 1
     [ "$state" = "true" ]
+}
+
+# Remove a container whether it is running or not. Not an error if it is gone
+# already: ./serve.sh --stop should be safe to run twice.
+remove_container() {
+    "$ENGINE" rm --force "$1" >/dev/null 2>&1 || true
+}
+
+# --------------------------------------------------------------------------
+# Where a browser on another machine should point.
+#
+# The machine this runs on has no desktop, so the reports are read over the
+# network from somewhere else - which means `localhost` is exactly the wrong
+# answer. This picks the address the host uses to reach the outside world,
+# which on a single-homed box is the one the browser wants. It is a *hint*: a
+# host with several interfaces has several right answers, and the port may be
+# behind a firewall. Both facts are worth printing rather than hiding.
+# --------------------------------------------------------------------------
+serve_host() {
+    local host=""
+    host="$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')"
+    [ -n "$host" ] || host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    [ -n "$host" ] || host="localhost"
+    printf '%s' "$host"
+}
+
+serve_url() {
+    printf 'http://%s:%s/' "$(serve_host)" "${1:-$SERVE_PORT}"
+}
+
+# The port the server is actually published on, which is not necessarily the
+# default: somebody may have started it with --port. Falls back to the default
+# when nothing is running, because the URL is then a suggestion anyway.
+serve_running_port() {
+    local port=""
+    port="$("$ENGINE" port "$SERVE_CONTAINER" 2>/dev/null \
+            | awk -F: 'NR==1 {print $NF; exit}')"
+    printf '%s' "${port:-$SERVE_PORT}"
 }

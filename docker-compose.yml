@@ -53,3 +53,30 @@ services:
       - .:/work:z
     working_dir: /work
     command: ["sleep", "infinity"]
+
+  # The report browser, for people who prefer compose to ./serve.sh. Behind a
+  # profile because it is the one service here that listens on a network:
+  # `docker compose --profile serve up -d serve`.
+  #
+  # It mounts only ./out/reports, and read-only. The container that is
+  # reachable from the network is the one that should be able to see the least
+  # - not projects/, not schema/, not the image's own tools.
+  #
+  # SPEC 8.3 sketched nginx:alpine here. This is the pipeline image instead:
+  # it is already built, already pinned and already carried into the air gap,
+  # and `python3 -m http.server` produces the same directory listing. A second
+  # image would be one more thing to bundle and checksum for M6, for nothing
+  # this use needs. See serve.sh, which is the supported entry point.
+  serve:
+    profiles: [serve]
+    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    container_name: continuum-serve
+    ports:
+      - "${SERVE_BIND:-0.0.0.0}:${SERVE_PORT:-8000}:${SERVE_PORT:-8000}"
+    read_only: true
+    volumes:
+      - ./out/reports:/work:ro,z
+    working_dir: /work
+    command:
+      ["sh", "-c",
+       "exec python3 -m http.server \"${SERVE_PORT:-8000}\" --bind 0.0.0.0 --directory /work"]

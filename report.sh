@@ -55,3 +55,13 @@ for renderer in charts xlsx txt pdf pptx; do
         --out "out/reports/$DATE" \
         --lang "$LANG_CODE"
 done
+
+# Where to look at it. This machine has no desktop, so the last useful thing
+# a run can say is the URL a browser somewhere else should open (./serve.sh).
+printf '\nreport: out/reports/%s\n' "$DATE"
+if container_running "$SERVE_CONTAINER"; then
+    printf '  open  %s%s/\n' "$(serve_url "$(serve_running_port)")" "$DATE"
+else
+    printf '  open  %s%s/\n' "$(serve_url)" "$DATE"
+    printf '        nothing is serving that yet: ./serve.sh --detach\n'
+fi
