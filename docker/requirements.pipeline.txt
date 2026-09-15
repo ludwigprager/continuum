@@ -24,3 +24,8 @@ pillow==11.3.0
 # font cache it builds on first run is baked at image build time (SPEC 8.2).
 matplotlib==3.11.2
 jinja2==3.1.6
+
+# M5 (PPTX). python-pptx fills the placeholders of templates/deck.potx; the
+# deck is never built from scratch and never converted by LibreOffice
+# (SPEC 6.4, 11). It brings lxml and XlsxWriter with it.
+python-pptx==1.0.2

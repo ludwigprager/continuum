@@ -864,8 +864,10 @@ def check_schema(schema_dir: Path) -> list[Finding]:
             WARNING, "schema.unlabelled-codes",
             f"{len(unlabelled)} code(s) have no German label: {joined(unlabelled, 8)}",
             rel_tax,
-            fix="SPEC 12.1: real labels are the top blocker for the deck (M5).\n"
-                "  Until they are filled in, charts would be labelled with bare codes."))
+            fix="SPEC 12.1 is still open, and it is now visible everywhere.\n"
+                "  Until they are filled in, these codes are printed bare - in the\n"
+                "  charts, the PDF, the deck and the Excel alike. Inventing words is\n"
+                "  not the alternative; asking the group that coined them is."))
 
     for name, data in sorted(references.items()):
         if data.get("provisional"):

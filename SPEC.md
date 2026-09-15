@@ -665,7 +665,60 @@ which must also be *writable* - matplotlib rejects a read-only one, warns, and
 silently rebuilds the cache somewhere else, which is the failure this was
 meant to prevent.
 
-**M5 — PDF and PPTX.**
+**M5 — PDF and PPTX. DONE.** All five formats now come out of one model.
+`./report.sh` writes `report.pdf` and `deck.pptx` next to the rest, both
+byte-identical for identical input like everything before them, and
+`./verify.sh` covers them because it hashes the whole report directory.
+
+The PDF is Typst 0.15.1, pinned by version and sha256 in a builder stage of
+`Dockerfile.pipeline`. `pdf.py` copies `templates/report.typ` next to the
+model, compiles with the report directory as the Typst root - which is what
+makes `json("report_model.json")` and the chart paths resolve, and means the
+compiler can read nothing outside it - and removes the copy afterwards, so the
+report directory stays the set of files 4 documents.
+
+Both Typst traps in 8.2 fired and are closed. The package registry one was
+predicted: the template imports nothing, `TYPST_PACKAGE_PATH` points into the
+image, and a test asserts the template stays that way. The font one was not,
+and is the same shape as M4's: `typst compile` **warns** about an unknown
+family, substitutes, writes the PDF and exits 0. `pdf.py` turns any such
+warning into a failure and deletes the PDF Typst had already written. It
+matches on the warning rather than on a list of font names, so whatever the
+template asks for is what gets checked. Determinism needed one more pin:
+Typst stamps the wall clock into the PDF unless `--creation-timestamp` says
+otherwise, which is wired to the model's own `generated_at`.
+
+The deck is python-pptx over `templates/deck.potx`, with the layout and
+placeholder mapping in one dict at the top of `pptx.py` as 6.4 asks. Two
+things bit:
+
+- **python-pptx refuses a real `.potx`.** A PowerPoint template differs from a
+  presentation by one OPC content type, and python-pptx checks it and raises
+  `ValueError: ... is not a PowerPoint file`. The corporate template (12.2)
+  will be a genuine .potx, so `load_template` swaps that content type in a
+  copy held in memory rather than asking whoever delivers it to rename the
+  file into something it is not. The placeholder template is a genuine .potx
+  for the same reason: so the swap is not the first time this path runs.
+- **`tools/render/pptx.py` is called `pptx.py` and so is python-pptx.** Run as
+  a script, `sys.path[0]` is `tools/render`, so `import pptx` finds the
+  renderer, imports it a second time under that name, and fails against a
+  half-initialised module - reported as "python-pptx is not installed", which
+  is a lie. The renderer drops its own directory from the search path before
+  importing and puts it back afterwards, and `tests/conftest.py` keeps the
+  renderer directory at the *end* of `sys.path` so a test asking for the
+  library gets the library.
+
+Until the corporate template arrives, `tools/make_deck_template.py` generates
+the placeholder, for the same reason `make_workbook_template.py` generates the
+workbook: a binary nobody can rebuild is a binary nobody can review. It also
+paid for a third trap - writing `left` on a layout placeholder that *inherits*
+its geometry from the master creates an offset with no extent, and the
+placeholder ends up at height zero. Only shapes that own their geometry are
+scaled; the rest follow the master.
+
+12.1 is still open and is visible in the output: codes with no label print
+bare, in the PDF and the deck as they already did in the charts. Inventing
+words was not on the table.
 
 **Not a milestone of its own, and done:** `import.sh` and
 `docker/Dockerfile.import`. The importer and `make_testdata.py` now run in a
@@ -704,13 +757,22 @@ schema version and image digest that produced them.
 
 Ask before guessing on these; each one changes the shape of the code.
 
-1. **Taxonomy semantics. STILL OPEN — top blocker for M5.** CA-1..3, CB-1..4,
-   S1..S4 and the tier codes are opaque outside the room they were invented in.
-   `taxonomy.yaml` carries `label_de: null` for each rather than invented words,
-   and `--check-schema` warns about every one until they are filled in. Charts
-   would otherwise be labelled with bare codes.
-2. **Corporate PowerPoint template.** Needed as `.potx` for M5. Until it arrives,
-   the placeholder mapping stays in one dict.
+1. **Taxonomy semantics. STILL OPEN.** CA-1..3, CB-1..4, S1..S4 and the tier
+   codes are opaque outside the room they were invented in. `taxonomy.yaml`
+   carries `label_de: null` for each rather than invented words, and
+   `--check-schema` warns about every one until they are filled in. It did not
+   block M5 in the end, because M4 had already settled what to do about it: a
+   code with no label is printed as the bare code. That is now true of the
+   charts, the PDF, the deck and the Excel alike - honest, and visible to
+   management, which is the point. Filling the labels in is one edit per code
+   and changes every output at once.
+2. **Corporate PowerPoint template. STILL OPEN, no longer blocking.** M5 is
+   built against the placeholder `tools/make_deck_template.py` generates - a
+   genuine 16:9 `.potx`, so the loader has already met the file type the real
+   one will be. Swapping it in is an edit to the `LAYOUTS` dict at the top of
+   `tools/render/pptx.py` and nothing else; the layout names in that dict are
+   checked against the template on every run, so a swap that moves a layout
+   says so instead of producing a deck laid out on the wrong master.
 3. **Report scoping.** One deck for everyone, or a per-team deck as well? Affects
    whether `build_model.py` runs once or once per team.
 4. **`placement`: single datacenter or multiple environments? STILL OPEN, but

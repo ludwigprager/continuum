@@ -192,8 +192,14 @@ to block local file reads as well as the network, and — in M4, as predicted �
 matplotlib's font cache. The third had a sting in the tail: baking the cache
 into the image is not enough, because matplotlib refuses a read-only
 `MPLCONFIGDIR`, says so in a warning nobody reads, and rebuilds the cache in a
-temp directory anyway. Typst fetching `@preview` packages is still ahead, in
-M5.
+temp directory anyway.
+
+M5 added a fourth and a fifth. The predicted one - Typst fetching `@preview`
+packages - was cheap, because the template simply imports nothing and a test
+says so. The unpredicted one was Typst's fonts, and it is the same shape as
+matplotlib's: `typst compile` **warns** about an unknown family, substitutes,
+writes the PDF and exits 0. `pdf.py` turns that warning into a failure and
+deletes the PDF Typst had already written.
 
 ## Where things stand
 
@@ -203,13 +209,18 @@ M5.
 | M2 tables + model | done |
 | M3 Excel | done |
 | M4 TXT + PNG | done |
-| M5 PDF + PPTX | next |
+| M5 PDF + PPTX | done |
 | M6 offline bundle | `--network=none` already enforced by `./verify.sh` |
 
 `import.sh` and `docker/Dockerfile.import` are done too, though they are not a
 milestone of their own.
 
-Open questions that block later work are in SPEC §12. The live one is
-**§12.1**: the taxonomy codes have no labels, `taxonomy.yaml` carries
-`label_de: null` rather than invented words, and `./check.sh --check-schema`
-warns about every one until they are filled in. That blocks M5.
+Open questions are in SPEC §12. **§12.1** is still live: the taxonomy codes
+have no labels, `taxonomy.yaml` carries `label_de: null` rather than invented
+words, and `./check.sh --check-schema` warns about every one until they are
+filled in. It turned out not to block M5 - M4 had already settled the answer,
+which is that a code with no label prints as the bare code - but it is now
+visible in all five outputs rather than just the charts, so it is worth
+chasing. **§12.2**, the corporate `.potx`, did not block M5 either: the deck
+is built against a generated placeholder and swapping the real one in is an
+edit to one dict.

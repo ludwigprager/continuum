@@ -6,9 +6,10 @@ rebuilt from those files and never hand-maintained.
 
 `SPEC.md` is the design document. This README is the operating manual.
 
-**Status: M1 (validation), M2 (snapshot + model) and M3 (Excel) complete.**
-M4–M6 are not built yet: there are no charts, no PDF, no deck and no offline
-bundle.
+**Status: M1 (validation), M2 (snapshot + model), M3 (Excel), M4 (TXT + PNG)
+and M5 (PDF + PPTX) complete.** All five output formats come out of one model.
+M6 is not built: there is no offline bundle yet, though the `--network=none`
+pipeline run it depends on has been enforced by `./verify.sh` since M1.
 
 ## Requirements
 
@@ -23,7 +24,7 @@ Every tool runs in a container.
 ./check.sh --check-schema           # validate the schema and reference files
 ./check.sh                          # validate projects/ - see below
 ./snapshot.sh                       # projects/ -> out/tables/*.jsonl
-./report.sh                         # snapshot + model + Excel -> out/reports/<date>/
+./report.sh                         # snapshot + model + all five formats -> out/reports/<date>/
 ./report.sh --lang en               # same, English labels
 ./shell.sh                          # interactive shell in the pipeline image
 ```
@@ -70,10 +71,11 @@ projects/**/*.yaml
 out/tables/*.jsonl  ->  DuckDB  ->  out/reports/<date>/report_model.json
                                        |  renderers lay out; they never compute
                                        v
-                       *.png            <- M4, built. Runs first; the others
-                       report.xlsx      <- M3, built    embed these PNGs.
-                       report.txt       <- M4, built
-                       report.pdf  deck.pptx            <- M5
+                       *.png            <- M4. Runs first; the xlsx
+                       report.xlsx      <- M3     dashboard, the PDF and the
+                       report.txt       <- M4     deck all embed these PNGs.
+                       report.pdf       <- M5, Typst
+                       deck.pptx        <- M5, python-pptx
 ```
 
 `report_model.json` is the only thing renderers read. If a renderer needs a
@@ -194,6 +196,75 @@ Two things keep the PNGs reproducible, which matters because the PDF and the
 deck will embed them: matplotlib is pinned to the patch version, and the
 `Software` chunk - which carries the matplotlib version into the file - is
 dropped rather than written.
+
+### The PDF
+
+`pdf.py` copies `templates/report.typ` next to `report_model.json` in the
+report directory and runs `typst compile` with that directory as the Typst
+root — which is what makes `#let data = json("report_model.json")` and the
+chart PNGs resolve, and means the compiler can read nothing else. The copy is
+removed afterwards; `--keep-source` leaves it for debugging.
+
+Typst rather than LaTeX (image size and speed) and rather than WeasyPrint (this
+is a paginated management report). WeasyPrint stays the documented fallback; a
+switch would be a decision to announce, not a detail to change quietly.
+
+Eight pages against the fixtures: title and provenance, the headline numbers
+and coverage, the charts, every table in the model, and the counting rules in
+full as an appendix. The template contains no field name, no code and no enum
+value — it walks `data.tables` and prints what is there.
+
+Two SPEC 8.2 traps live here and both are closed:
+
+* **Fonts.** Typst *warns* about an unknown family, substitutes, and exits 0.
+  `pdf.py` turns any such warning into a failure and deletes the PDF Typst had
+  already written. Because it matches on the warning rather than on a list of
+  names, whatever the template asks for is what gets checked.
+* **Packages.** `#import "@preview/..."` reaches for the package registry.
+  The template imports nothing, `TYPST_PACKAGE_PATH` points into the image, and
+  `tests/test_pdf.py` asserts the template stays that way.
+
+The PDF is byte-identical for identical input. Typst stamps the current time
+into a PDF unless told otherwise, so the creation timestamp is always pinned to
+the model's own `generated_at` — the PDF metadata then says when the report was
+generated *and* two runs of one model agree.
+
+### The deck
+
+`pptx.py` fills the placeholders of `templates/deck.potx` by `idx`. It never
+builds slides from scratch and never converts anything through LibreOffice
+(SPEC 11). Everything it knows about the template is the `LAYOUTS` dict at the
+top of the file, checked against the template by name on every run, so a
+template swap fails at that dict instead of producing a plausible deck laid out
+on the wrong master.
+
+One title slide, the headline numbers, coverage by team, one slide per chart,
+one per table in the model, and the counting rules as an appendix. A table too
+tall for one slide continues on the next under the same title — nothing is
+dropped to make it fit.
+
+**The corporate template has not been supplied (SPEC 12.2).** Until it arrives,
+`tools/make_deck_template.py` generates the placeholder:
+
+```bash
+./shell.sh python3 tools/make_deck_template.py --out templates/deck.potx
+```
+
+Generated rather than hand-made, for the same reason `templates/workbook.xlsx`
+is: a binary nobody can rebuild is a binary nobody can review. It is 16:9, uses
+Arial, and is a **genuine `.potx`** — which matters, because python-pptx
+refuses to open one. A PowerPoint template differs from a presentation by one
+OPC content type, and python-pptx checks it and raises `ValueError: ... is not
+a PowerPoint file`. `load_template` swaps that content type in a copy held in
+memory, leaving the file on disk untouched, so the real template will work the
+day it lands.
+
+The chart PNGs are inserted uncropped: a picture placeholder crops an image to
+fill its frame, which cuts the category labels off a wide chart, so the crop is
+undone and the picture refitted to the frame at the aspect ratio the model
+declares. The deck is byte-identical for identical input, the same way the
+workbook is — pinned zip timestamps and document properties taken from the
+model.
 
 ### The text report
 
@@ -458,13 +529,18 @@ updated to specify them, so they are no longer deviations. What remains:
 
 From SPEC §12, still unanswered:
 
-1. **Taxonomy labels** (blocks M5). `CA-1..3`, `CB-1..4`, `S1..S4` and the tier
-   codes have no labels; `taxonomy.yaml` carries `null` rather than invented
-   words, and `--check-schema` warns about every one until they are filled in.
+1. **Taxonomy labels.** `CA-1..3`, `CB-1..4`, `S1..S4` and the tier codes have
+   no labels; `taxonomy.yaml` carries `null` rather than invented words, and
+   `--check-schema` warns about every one until they are filled in. This does
+   not block a milestone but it is visible in every output: those codes print
+   bare, in the charts, the PDF, the deck and the Excel alike. The labels are
+   a one-line edit per code once somebody answers.
 2. **`schema/sites.yaml` and `schema/teams.yaml` are provisional**, seeded from
    the fixtures. Anything missing from them will fail real data. Both are
    flagged by `--check-schema`.
-3. **Corporate `.potx`** (blocks M5).
+3. **Corporate `.potx`.** M5 is built against the generated placeholder
+   described above. Swapping in the real template is an edit to the `LAYOUTS`
+   dict in `pptx.py` and nothing else.
 4. **Report scoping** — one deck, or one per team (changes whether
    `build_model.py` runs once or per team).
 5. **`placement` shape** (§12.4) — no longer blocking: both shapes normalise

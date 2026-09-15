@@ -1,4 +1,41 @@
 # Pipeline image. Built outside the air gap, carried in (SPEC 8.1).
+#
+# Stage 1: Typst. The release tarball is downloaded here, verified against a
+# pinned checksum and reduced to the single binary that the final image needs.
+# Downloading at runtime is not an option - inside the air gap there is no
+# network - and building it from source would drag a Rust toolchain into an
+# image that is otherwise 400 MB.
+#
+# The version is pinned to the patch: Typst shifts layout between releases,
+# which would break the byte-level reproducibility of the PDF (SPEC 9). It was
+# checked, not assumed - 0.15.1 is the current release (2026-07-17).
+FROM python:3.12-slim-bookworm AS typst
+
+ARG TYPST_VERSION=0.15.1
+# One checksum per architecture, from the release page. A tarball that does not
+# match is a failed build, not a mystery PDF.
+ARG TYPST_SHA256_x86_64=a6d077d0a95eed5a2eba715b2dae06be954f624ccbf85758a03f389ded33118c
+ARG TYPST_SHA256_aarch64=5aa8d74a3d906e60ea12a66ac2f37f8eef1b14cbad7182a745e393a10c23dcee
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends curl xz-utils ca-certificates; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64)  sha="$TYPST_SHA256_x86_64" ;; \
+        aarch64) sha="$TYPST_SHA256_aarch64" ;; \
+        *) echo "no pinned Typst checksum for $arch" >&2; exit 1 ;; \
+    esac; \
+    target="typst-${arch}-unknown-linux-musl"; \
+    curl -fsSL -o /tmp/typst.tar.xz \
+        "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/${target}.tar.xz"; \
+    echo "${sha}  /tmp/typst.tar.xz" | sha256sum -c -; \
+    tar -xJf /tmp/typst.tar.xz -C /tmp; \
+    install -m 0755 "/tmp/${target}/typst" /usr/local/bin/typst; \
+    typst --version; \
+    rm -rf /tmp/typst.tar.xz "/tmp/${target}" /var/lib/apt/lists/*
+
+# Stage 2: the pipeline itself.
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -7,7 +44,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LANG=de_DE.UTF-8 \
     LC_ALL=de_DE.UTF-8 \
     MPLBACKEND=Agg \
-    MPLCONFIGDIR=/opt/mpl
+    MPLCONFIGDIR=/opt/mpl \
+    TYPST_PACKAGE_PATH=/opt/typst/packages \
+    TYPST_PACKAGE_CACHE_PATH=/opt/typst/cache
 
 # Locale and timezone must be baked in: without them German month names and
 # number formatting come out wrong, and there is no network at runtime to fix it.
@@ -46,6 +85,26 @@ RUN set -eux; \
                 print(len(font_manager.fontManager.ttflist), 'fonts cached')"; \
     chmod -R a+rwX "$MPLCONFIGDIR"; chmod 1777 "$MPLCONFIGDIR"; \
     test -n "$(ls -A "$MPLCONFIGDIR")"
+
+# Typst, from the builder stage: one static binary, no runtime dependencies.
+#
+# SPEC 8.2: Typst fetches `@preview/...` packages from its registry on first
+# use, which inside the air gap is a failed report. templates/report.typ
+# imports nothing (asserted in tests/test_pdf.py), and the two package paths
+# above point at a directory in the image rather than at $HOME, so a template
+# that did try would fail loudly here instead of writing into a home directory
+# that may not even be writable.
+# The `typst fonts` greps are the same assertion charts.py makes at startup: a
+# missing font does not error, it silently substitutes (SPEC 8.2), and the
+# report then looks different inside the air gap than it did outside.
+COPY --from=typst /usr/local/bin/typst /usr/local/bin/typst
+RUN set -eux; \
+    mkdir -p "$TYPST_PACKAGE_PATH" "$TYPST_PACKAGE_CACHE_PATH"; \
+    chmod -R a+rwX /opt/typst; \
+    typst --version; \
+    typst fonts | grep -qx "Liberation Sans"; \
+    typst fonts | grep -qx "Liberation Mono"; \
+    typst fonts | grep -qx "DejaVu Sans"
 
 # uid 1000 so rootless podman's --userns=keep-id maps the host user cleanly.
 RUN groupadd -g 1000 pipeline && useradd -u 1000 -g 1000 -m -s /bin/bash pipeline
