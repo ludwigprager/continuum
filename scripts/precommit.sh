@@ -5,7 +5,7 @@
 # Install:  ln -sf ../../scripts/precommit.sh .git/hooks/pre-commit
 # Skip once: git commit --no-verify
 #
-# Set USE_WARM_CONTAINER=1 and keep a `mig-dev` container running to avoid
+# Set USE_WARM_CONTAINER=1 and keep a `continuum-dev` container running to avoid
 # paying container startup on every commit.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

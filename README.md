@@ -1,4 +1,8 @@
-# Migration catalogue
+# Continuum catalogue
+
+The reporting pipeline for **Project Continuum**, the 6R portfolio assessment
+described in `continuum.md` (`continuum.de.md` in German). That document is the
+initiative; this repository is the catalogue and the daily report built from it.
 
 Git is the system of record: one YAML file per project, flat in `projects/`.
 Everything derived — snapshots, the report model, the five output formats — is
@@ -58,8 +62,8 @@ Same code path as `check.sh` and CI. To avoid paying container startup on every
 commit, keep a warm container and set `USE_WARM_CONTAINER=1`:
 
 ```bash
-podman run -d --name mig-dev --network=none -v "$PWD:/work:z" \
-    -w /work "mig-pipeline:$(cat VERSION)" sleep infinity
+podman run -d --name continuum-dev --network=none -v "$PWD:/work:z" \
+    -w /work "continuum-pipeline:$(cat VERSION)" sleep infinity
 ```
 
 ## The pipeline

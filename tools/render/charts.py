@@ -155,7 +155,7 @@ def configure(font: str) -> None:
         "xtick.color": INK_MUTED,
         "ytick.color": INK,
         "axes.unicode_minus": False,
-        "svg.hashsalt": "mig",
+        "svg.hashsalt": "continuum",
     })
 
 

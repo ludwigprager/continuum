@@ -43,7 +43,7 @@
 # =========================================================================
 
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: https://example.invalid/mig/project.schema.json
+$id: https://example.invalid/continuum/project.schema.json
 title: Project record
 description: >-
   One project. Everything except id and schema_version may be missing;

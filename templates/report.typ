@@ -92,7 +92,7 @@
 
 #set document(
   title: tr(data.at("report", default: (:)), "title", default: "Report"),
-  author: "mig pipeline",
+  author: "continuum pipeline",
   // `auto` is the compiler's creation timestamp, and pdf.py always pins that
   // to the model's own `generated_at` (--creation-timestamp). So the PDF
   // metadata says when the report was generated AND the same model compiles

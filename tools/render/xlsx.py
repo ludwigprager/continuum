@@ -556,7 +556,7 @@ def render(model: dict, out_dir: Path, lang: str, template: Path | None,
         warnings.append("this workbook has no pre-built pivot tables")
     order_sheets(workbook)
 
-    workbook.properties.creator = "mig pipeline"
+    workbook.properties.creator = "continuum pipeline"
     workbook.properties.title = t(model.get("report", {}), "title", lang, "")
     # No clock reading: the workbook is as reproducible as the model it came
     # from (SPEC 5.2).

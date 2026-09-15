@@ -35,7 +35,7 @@ def renderer(name: str) -> ModuleType:
     shadowing the package for every other test in the session.
     """
     path = REPO / "tools" / "render" / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(f"mig_render_{name}", path)
+    spec = importlib.util.spec_from_file_location(f"continuum_render_{name}", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

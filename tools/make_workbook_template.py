@@ -199,7 +199,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return EXIT_TOOL
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    workbook.properties.creator = "mig pipeline"
+    workbook.properties.creator = "continuum pipeline"
     # A fixed date, not the clock: the template is committed, and a rebuild
     # that changed nothing should produce no diff.
     workbook.properties.created = xlsx.EPOCH

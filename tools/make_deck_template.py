@@ -35,6 +35,7 @@ Exit codes: 0 ok, 2 tool/usage error.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import re
 import sys
 import zipfile
@@ -88,9 +89,11 @@ PRESENTATION_TYPE = ("application/vnd.openxmlformats-officedocument"
 TEMPLATE_TYPE = ("application/vnd.openxmlformats-officedocument"
                  ".presentationml.template.main+xml")
 
-# A fixed timestamp for every zip entry, so the committed template does not
-# change every time it is regenerated (SPEC 5.2, same rule as the workbook).
+# A fixed timestamp for every zip entry and for the document properties, so
+# the committed template does not change every time it is regenerated
+# (SPEC 5.2, same rule as the workbook).
 ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
+EPOCH = dt.datetime(1980, 1, 1)
 
 
 def has_own_geometry(shape) -> bool:
@@ -212,11 +215,20 @@ def build(out: Path, font: str = BODY_FONT) -> tuple[list[str], int]:
     relayout(presentation)
     names = rename_layouts(presentation, LAYOUT_NAMES)
 
-    presentation.core_properties.title = "mig deck template (placeholder)"
-    presentation.core_properties.author = "mig pipeline"
-    presentation.core_properties.comments = (
+    # All of it set explicitly. python-pptx's default template carries its
+    # own author and dates, and left alone they end up in a file this project
+    # ships - a corporate deck template crediting a stranger, stamped with a
+    # date nobody here chose.
+    properties = presentation.core_properties
+    properties.title = "continuum deck template (placeholder)"
+    properties.author = "continuum pipeline"
+    properties.last_modified_by = "continuum pipeline"
+    properties.comments = (
         "Placeholder until the corporate template is supplied (SPEC 12.2). "
         "Regenerate with tools/make_deck_template.py.")
+    properties.created = EPOCH
+    properties.modified = EPOCH
+    properties.revision = 1
 
     out.parent.mkdir(parents=True, exist_ok=True)
     presentation.save(out)

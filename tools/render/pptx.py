@@ -660,8 +660,8 @@ def render(model: dict, out_dir: Path, lang: str, template: Path | None,
 
     properties = presentation.core_properties
     properties.title = t(model.get("report") or {}, "title", lang, "")
-    properties.author = "mig pipeline"
-    properties.last_modified_by = "mig pipeline"
+    properties.author = "continuum pipeline"
+    properties.last_modified_by = "continuum pipeline"
     properties.comments = (f"as_of {model.get('as_of_date', '')}, git "
                            f"{(model.get('provenance') or {}).get('git_sha', '')}")
     # No clock reading: the deck is as reproducible as the model (SPEC 5.2).

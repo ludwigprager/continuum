@@ -11,15 +11,18 @@
 # knows how to pass the git provenance in. A `report` service would be a second
 # copy of that order, in a file nothing tests, free to drift. Use ./report.sh.
 #
-# The image tag follows VERSION, the same way scripts/lib.sh derives it.
-# Override with IMAGE_TAG in the environment or a .env file.
+# The image tag follows VERSION, the same way scripts/lib.sh derives it -
+# but compose cannot read a file, so the fallback below is a literal and has
+# to be bumped with VERSION. It drifted once already (M4 -> M5); if you find
+# compose running an old image, this is why. Override with IMAGE_TAG in the
+# environment or a .env file to avoid the question entirely.
 
 services:
   check:
     build:
       context: .
       dockerfile: docker/Dockerfile.pipeline
-    image: mig-pipeline:${IMAGE_TAG:-0.4.0}
+    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
     # Not paranoia: the cheapest possible regression test for the air-gap
     # traps in SPEC 8.2.
     network_mode: none
@@ -31,7 +34,7 @@ services:
     command: ["python3", "tools/validate.py", "--projects", "projects", "--schema", "schema"]
 
   shell:
-    image: mig-pipeline:${IMAGE_TAG:-0.4.0}
+    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
     network_mode: none
     volumes:
       - .:/work:z
@@ -43,8 +46,8 @@ services:
   # Warm container for the pre-commit hook. `docker compose up -d dev`, then
   # USE_WARM_CONTAINER=1. Purely a latency optimisation; nothing requires it.
   dev:
-    image: mig-pipeline:${IMAGE_TAG:-0.4.0}
-    container_name: mig-dev
+    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    container_name: continuum-dev
     network_mode: none
     volumes:
       - .:/work:z
