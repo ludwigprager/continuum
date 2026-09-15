@@ -2,12 +2,12 @@
 
 You are picking up a project mid-build.
 
-**Done: M1 (validation), M2 (tables + report model), M3 (Excel) and M4
-(TXT + PNG).** `./check.sh` and `./report.sh` work end to end against
-`projects/` with no network access, under podman or docker, and produce
-`report.xlsx`, `report.txt` and the chart PNGs. What remains is two of the
-five renderers (M5) and the offline bundle (M6). See 10 for the state of
-each.
+**Done: M1 (validation), M2 (tables + report model), M3 (Excel), M4
+(TXT + PNG) and M5 (PDF + PPTX).** `./check.sh` and `./report.sh` work end
+to end against `projects/` with no network access, under podman or docker,
+and produce all five formats: `report.xlsx`, `report.pdf`, `deck.pptx`,
+`report.txt` and the chart PNGs. What remains is the offline bundle (M6).
+See 10 for the state of each.
 
 Read this whole document before writing code. The **Contracts** and **Do not**
 sections are the parts that will cost the most to get wrong.
