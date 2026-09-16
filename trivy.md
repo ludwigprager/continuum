@@ -7,34 +7,16 @@ This project builds two images (`SPEC.md` §8.1):
 | `continuum-pipeline:<VERSION>` | `docker/Dockerfile.pipeline` | `./check.sh`, `./snapshot.sh`, `./report.sh`, `./verify.sh`, `./shell.sh`, `./serve.sh` |
 | `continuum-import:<VERSION>` | `docker/Dockerfile.import` | `./merge/merge.sh`, `./import/import.sh` |
 
-`<VERSION>` is the contents of `VERSION` at the repo root (currently `0.5.0`).
-Neither image is pulled from a registry — `scripts/lib.sh` builds them locally
-on first use (`ensure_image`) — so scanning them means scanning what you just
-built, not something fetched.
+`<VERSION>` is the contents of `VERSION` at the repo root. Neither image is
+pulled from a registry — `scripts/lib.sh` builds them locally on first use
+(`ensure_image`) — so scanning them means scanning what you just built.
 
-This howto uses the native `trivy` binary, not the containerized image. Trivy
-talks to whichever engine looks like Docker; podman is the default engine
-here, so most commands go through a saved archive rather than a live socket.
-
-## Install Trivy (apt)
-
-Debian/Ubuntu, via Aqua Security's apt repo:
-
-```bash
-sudo apt-get install -y wget gnupg
-wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | \
-    sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
-echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | \
-    sudo tee /etc/apt/sources.list.d/trivy.list
-sudo apt-get update
-sudo apt-get install -y trivy
-trivy --version
-```
-
-(If this repo's own Ubuntu release ships a recent enough `trivy` package
-directly, `sudo apt-get install -y trivy` without adding the repo also works —
-check `apt-cache policy trivy` first. The repo above is the reliable path when
-it doesn't.)
+This howto runs **Trivy itself as a container**, scanning the images in
+Podman's local store through Podman's API socket via Trivy's own
+`--podman-host` flag. That's Trivy's documented, native Podman integration —
+not a `DOCKER_HOST` compatibility trick — so nothing has to be exported to a
+tarball first and nothing has to be installed on the host. See
+[Podman support in Trivy's container-image target docs](https://trivy.dev/docs/dev/guide/target/container_image/).
 
 ## Build the images first
 
@@ -48,64 +30,131 @@ podman build -f docker/Dockerfile.import  -t continuum-import:$V  .
 (Or just run `./check.sh` / `./import/import.sh` once — either builds the
 image it needs.)
 
-## Scan by name, via the podman socket
+## 1. Enable Podman's socket
 
-Trivy's Docker-API client works against podman's socket too:
+This host runs **rootless** Podman (check with `podman info --format
+'{{.Host.Security.Rootless}}'`), so the socket is a per-user systemd unit:
 
 ```bash
-systemctl --user start podman.socket
-export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
-
-trivy image continuum-pipeline:$V
-trivy image continuum-import:$V
+systemctl --user enable --now podman.socket
+systemctl --user status podman.socket   # confirm it's active
 ```
 
-## Scan by archive (no socket needed)
+The socket lands at `/run/user/$(id -u)/podman/podman.sock`. On **rootful**
+Podman it's `/run/podman/podman.sock` instead, owned by root — the mount and
+socket path below both change accordingly; run as root or via `sudo` and drop
+the `--user` from the systemctl calls.
 
-More reliable, and it scans exactly what you'd carry into the air gap if you
-were bundling for M6:
+## 2. Run Trivy in a container, pointed at the socket
+
+Pin the Trivy image version rather than `:latest` — this project pins every
+renderer for reproducibility (`SPEC.md` §9), and a scanner that silently
+changes version between runs is the same trap. Check
+[the current release](https://github.com/aquasecurity/trivy/releases) and
+update the tag below when you bump it deliberately.
 
 ```bash
-podman save --format oci-archive -o /tmp/pipeline.tar continuum-pipeline:$V
-trivy image --input /tmp/pipeline.tar
+TRIVY_IMAGE=docker.io/aquasec/trivy:0.68.0
+V=$(cat VERSION)
 
-podman save --format oci-archive -o /tmp/import.tar continuum-import:$V
-trivy image --input /tmp/import.tar
+podman run --rm \
+  -v "/run/user/$(id -u)/podman/podman.sock:/run/podman/podman.sock:z" \
+  -v trivy-cache:/root/.cache \
+  "$TRIVY_IMAGE" \
+  image --podman-host /run/podman/podman.sock \
+  "continuum-pipeline:$V"
+
+podman run --rm \
+  -v "/run/user/$(id -u)/podman/podman.sock:/run/podman/podman.sock:z" \
+  -v trivy-cache:/root/.cache \
+  "$TRIVY_IMAGE" \
+  image --podman-host /run/podman/podman.sock \
+  "continuum-import:$V"
+```
+
+The `:z` on the socket mount relabels it for SELinux hosts, the same reason
+every bind mount in `scripts/lib.sh` carries one — harmless where SELinux
+isn't enforcing, required where it is. `trivy-cache` is a named volume so the
+vulnerability DB survives between scans instead of redownloading every run.
+
+Trivy reads the image straight out of Podman's store over the socket; nothing
+needs to be exported to a tarball and nothing needs mounting from
+`/var/lib/containers/storage`.
+
+## 3. A shell function, if you'll do this often
+
+```bash
+trivy-podman() {
+    podman run --rm \
+        -v "/run/user/$(id -u)/podman/podman.sock:/run/podman/podman.sock:z" \
+        -v trivy-cache:/root/.cache \
+        docker.io/aquasec/trivy:0.68.0 \
+        image --podman-host /run/podman/podman.sock \
+        "$@"
+}
+```
+
+```bash
+V=$(cat VERSION)
+trivy-podman "continuum-pipeline:$V"
+trivy-podman --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed "continuum-import:$V"
+```
+
+## Alternative: no persistent socket
+
+If you'd rather not leave a socket enabled, start one just for the scan:
+
+```bash
+SOCKET=$(mktemp -u)
+podman system service --time=60 "unix://$SOCKET" &
+PID=$!
+
+podman run --rm \
+  -v "$SOCKET:/run/podman/podman.sock:z" \
+  -v trivy-cache:/root/.cache \
+  docker.io/aquasec/trivy:0.68.0 \
+  image --podman-host /run/podman/podman.sock \
+  "continuum-pipeline:$(cat VERSION)"
+
+kill "$PID"
 ```
 
 ## Useful flags
 
 ```bash
 # fail on real, fixable severities only
-trivy image --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed continuum-pipeline:$V
+trivy-podman --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed "continuum-pipeline:$V"
 
 # vulnerabilities + secrets + misconfig in one pass
-trivy image --scanners vuln,secret,misconfig continuum-pipeline:$V
+trivy-podman --scanners vuln,secret,misconfig "continuum-pipeline:$V"
 
 # machine-readable, for CI
-trivy image --format json --output pipeline-scan.json continuum-pipeline:$V
+trivy-podman --format json --output pipeline-scan.json "continuum-pipeline:$V"
 ```
 
 ## Offline scanning (matches this project's air-gap model)
 
-Trivy fetches its vulnerability DB from GitHub on first run — the same class
-of runtime-network trap `SPEC.md` §8.2 lists for Typst, DuckDB and pip.
-Pre-fetch it outside, carry the cache in, scan with no network inside:
+Trivy fetches its vulnerability DB from a registry on first run — the same
+class of runtime-network trap `SPEC.md` §8.2 lists for Typst, DuckDB and pip.
+Pre-fetch it into the cache volume outside the air gap, then scan with
+`--skip-db-update` inside:
 
 ```bash
-# outside the air gap, once
-trivy image --download-db-only --cache-dir ./trivy-cache
+# outside, once
+podman run --rm -v trivy-cache:/root/.cache docker.io/aquasec/trivy:0.68.0 \
+    image --download-db-only
 
-# carry ./trivy-cache in alongside the image archives
-
-# inside, fully offline
-trivy image --cache-dir ./trivy-cache --skip-db-update --offline-scan \
-    --input /tmp/pipeline.tar
+# carry the trivy-cache volume in (podman volume export/import), then inside:
+trivy-podman --skip-db-update --offline-scan "continuum-pipeline:$V"
 ```
+
+To move the volume across the gap:
+`podman volume export trivy-cache -o trivy-cache.tar` outside,
+`podman volume import trivy-cache trivy-cache.tar` inside.
 
 ## Do not use `scripts/lib.sh`'s `run_in_container` for this
 
 It always mounts the repo read-only at `/work` and defaults to
-`--network=none` (`scripts/lib.sh`), which is right for the pipeline's own
-tools but has nothing to do with scanning an image. Run `trivy` directly as
-above, not through `./check.sh` or a similar entry point.
+`--network=none`, which is right for the pipeline's own tools but has nothing
+to do with scanning an image. Run `podman run` for Trivy directly as above,
+not through `./check.sh` or a similar entry point.
