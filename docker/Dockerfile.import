@@ -1,6 +1,6 @@
 # Import image. Built outside the air gap, carried in (SPEC 8.1).
-# Same base as the pipeline image; only PyYAML on top once the xlsx importer
-# is replaced (SPEC 3) - `csv` is in the standard library.
+# Same base as the pipeline image; only PyYAML on top - `csv` is in the
+# standard library and SPEC 3 removed the xlsx import, so no openpyxl.
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,9 +12,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # The source extracts are German: without the locale, umlauts in project
 # names and German month names come out wrong, and there is no network at
 # runtime to fix it.
+#
+# libpcre2-8-0 is pinned to an exact patched version rather than reached with
+# a blanket `apt-get upgrade`: an upgrade pulls whatever is newest in the repo
+# on the day of the build, which is exactly the kind of drift this project
+# pins against everywhere else (SPEC 9). A version nailed down here is a
+# version this Dockerfile always installs, and a bump is a deliberate,
+# reviewable one-line change like every other pin in the project.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends locales tzdata; \
+    apt-get install -y --no-install-recommends \
+        locales tzdata libpcre2-8-0=10.42-1+deb12u1; \
     sed -i 's/^# *\(de_DE.UTF-8 UTF-8\)/\1/' /etc/locale.gen; \
     locale-gen; \
     ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime; \
@@ -23,6 +31,16 @@ RUN set -eux; \
 
 COPY docker/requirements.import.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+# pip is a build-time tool, not a runtime dependency (SPEC 8.2: "No pip at
+# runtime"), so the image is more minimal - and one whole class of scanner
+# findings narrower - with it gone rather than pinned. `python -m pip
+# uninstall` can remove pip's own files because the module is already loaded
+# in memory by the time it does so; setuptools and wheel are not installed as
+# separate packages here (pip vendors what it needs), so those two are
+# no-ops, kept only so a future base image that does ship them separately
+# does not silently leave them behind.
+RUN python3 -m pip uninstall -y pip setuptools wheel
 
 RUN groupadd -g 1000 pipeline && useradd -u 1000 -g 1000 -m -s /bin/bash pipeline
 USER pipeline

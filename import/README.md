@@ -3,11 +3,15 @@
 Turns the one merged CSV into one YAML file per project in `projects/`, which
 from then on is the system of record.
 
-**Not built yet.** `./import/import.sh profile` and `./import/import.sh convert` still run the
-old xlsx importer against a single spreadsheet. SPEC §3 is the design, §3.4 the
-new-field/new-value rules and §5.4.2 the bootstrap rule. What follows
-describes the target; the walkthrough at the bottom works today only as far as
-the merge.
+`import_csv.py` reads one CSV and writes one YAML file per project. There is no
+xlsx reader — it refuses a `.xlsx` by name and says why. SPEC §3 is the design,
+§3.4 the new-field/new-value rules and §5.4.2 the bootstrap rule.
+
+Two things §3.4 specifies are **not built yet**: a new taxonomy value is not
+added to `taxonomy.yaml` automatically, and a new column does not produce a
+stanza in `proposals.md`. Both are done by editing those files by hand
+meanwhile, and nothing is lost in the gap — an unmapped column lands in
+`_unmapped` verbatim.
 
 Step 1 is [`merge/`](../merge/README.md), which is where the extracts go and
 where they are reduced to one file.
@@ -125,8 +129,10 @@ It is committed, unlike a real extract: it is invented data, so it does not
 touch SPEC §12.8.
 
 ```bash
-# 1. put the extract where step 1 reads
+# 1. put an extract where step 1 reads. Either the committed single one:
 cp import/example-extract.csv merge/input/
+#    or three that actually contradict each other, which is the better demo:
+#    ./shell.sh python3 merge/make_testdata.py
 
 # 2. merge. With one source there is nothing to resolve, but you get the
 #    merged.csv, the empty conflicts file and the manifest
@@ -135,10 +141,11 @@ cp import/example-extract.csv merge/input/
 # 3. read the result, then do what its last line tells you
 cp merge/merged.csv import/merged.csv
 
-# 4. scan it, edit the mapping, convert          <- NOT BUILT YET
-./import/import.sh profile
-./import/import.sh convert
+# 4. scan it, edit the mapping if needed, convert
+./import/import.sh profile import/merged.csv
+./import/import.sh convert import/merged.csv
 ./check.sh
+./report.sh
 ```
 
 To see the merge actually do its job, copy the extract in twice under different

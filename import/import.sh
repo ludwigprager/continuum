@@ -14,17 +14,16 @@
 # here by hand as import/merged.csv. Run it first; it prints the cp command.
 # Test extracts come from ./merge/make_testdata.py.
 #
-# There is no xlsx import: xlsx is an output format only.
+# There is no xlsx import: xlsx is an output format only. The reader takes a
+# CSV and refuses a .xlsx by name, saying so.
 #
-# NOT YET REBUILT against import/merged.csv. Until it is, profile/convert/schema
-# take a spreadsheet path and run the superseded importer that still lives here
-# (import_xlsx.py, import/README-xlsx-legacy.md):
-#   ./import/import.sh profile  projekte.xlsx
-#   ./import/import.sh convert  projekte.xlsx
-#   ./import/import.sh schema   projekte.xlsx
+#   ./import/import.sh profile import/merged.csv   # -> profile.md + starters
+#   ./import/import.sh convert import/merged.csv   # -> projects/*.yaml
+#   ./import/import.sh schema  import/merged.csv   # -> a derived JSON Schema
 #
-# The manual step between profile and convert is the point of the tool: read
-# import/profile.md, edit import/mapping.yaml and import/value_map.yaml.
+# The manual step between profile and convert is the point of the tool, and the
+# only one: read import/profile.md, edit import/mapping.yaml and
+# import/value_map.yaml. See import/README.md.
 set -euo pipefail
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../scripts/lib.sh
@@ -108,24 +107,24 @@ CMD="$1"; shift
 
 case "$CMD" in
     profile)
-        [ $# -ge 1 ] || die "import.sh profile: need the spreadsheet path"
-        run_in_container --rw -- python3 import/import_xlsx.py profile "$@" --out import/
+        [ $# -ge 1 ] || die "import.sh profile: need the CSV path (normally import/merged.csv)"
+        run_in_container --rw -- python3 import/import_csv.py profile "$@" --out import/
         ;;
     convert)
-        [ $# -ge 1 ] || die "import.sh convert: need the spreadsheet path"
+        [ $# -ge 1 ] || die "import.sh convert: need the CSV path (normally import/merged.csv)"
         parse_convert_args "$@"
         guard_existing_catalogue
         # projects/ is flat: one file per project, the owning team is
         # ownership.team_id inside it (SPEC 2). --group-column none stops the
         # importer auto-detecting a Team column and recreating per-team
         # directories.
-        run_in_container --rw -- python3 import/import_xlsx.py convert \
+        run_in_container --rw -- python3 import/import_csv.py convert \
             ${ARGS[@]+"${ARGS[@]}"} \
             --config import/ --out "$OUT" --group-column none
         ;;
     schema)
-        [ $# -ge 1 ] || die "import.sh schema: need the spreadsheet path"
-        run_in_container --rw -- python3 import/import_xlsx.py derive-schema "$@" \
+        [ $# -ge 1 ] || die "import.sh schema: need the CSV path (normally import/merged.csv)"
+        run_in_container --rw -- python3 import/import_csv.py derive-schema "$@" \
             --config import/ --out schema/derived.schema.json
         ;;
     -h|--help) usage ;;

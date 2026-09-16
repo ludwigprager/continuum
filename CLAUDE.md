@@ -20,5 +20,5 @@ Working agreement:
   there. Read merge/README.md before touching it, and keep it stdlib-only.
   import/ has its own README.md too. The root README.md points at both rather
   than repeating them.
-- Do not modify import/import_xlsx.py or merge/merge_csv.py unless they have a bug.
+- Do not modify import/import_csv.py or merge/merge_csv.py unless they have a bug.
 - If §12 (open questions) blocks you, ask. Do not invent taxonomy labels.

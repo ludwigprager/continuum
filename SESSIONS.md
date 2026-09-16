@@ -21,7 +21,6 @@ git init
 mkdir -p tools templates schema reports tests/fixtures docker
 cp ~/Downloads/import_csv.py tools/
 cp ~/Downloads/make_testdata.py tools/
-cp ~/Downloads/README.md import/README-xlsx-legacy.md
 cp ~/Downloads/SPEC.md .
 
 git add -A && git commit -m "importer + handoff"
@@ -105,7 +104,7 @@ cp merge/merged.csv import/merged.csv # the merge will not do this for you
 
 Three manual steps, all deliberate: inspecting `merged.csv`, copying it across, and
 editing the mapping between `profile` and `convert`. See SPEC §3 and
-`import/README-xlsx-legacy.md`.
+`import/README.md`.
 
 **`convert` writes into `projects/`.** Existing values win over the CSV
 (SPEC §5.4.2), so it will not overwrite work — but to see what a new extract
@@ -219,19 +218,21 @@ deletes the PDF Typst had already written.
 | M5 PDF + PPTX | done |
 | M6 offline bundle | `--network=none` already enforced by `./verify.sh` |
 | import (CSV) step 1, merge | done |
-| import (CSV) step 2, convert | **current work** |
+| import (CSV) step 2, convert | done, minus the §3.4 handling |
 
 `import.sh` and `docker/Dockerfile.import` run in a container and that part
 stands, but the importer itself is being replaced. The source data turned out
 to be several overlapping CSV extracts rather than one spreadsheet, so the xlsx
 path is gone and the import is now two steps with a directory each.
-`./merge/merge.sh` reduces every CSV in `merge/input/` to one `merged.csv` on a join
-key, first-wins per cell, and prints the `cp` that hands it to step 2 — that
-step is **built** and self-contained in `merge/`, with its own README and 21
-tests. `import_csv.py`, which
-converts that single file, is **not**: `./import/import.sh profile|convert` still runs
-the xlsx importer until it is. SPEC §3 is the design, §5.4 the merge contract,
-§10 the acceptance for each step.
+`./merge/merge.sh` reduces every CSV in `merge/input/` to one `merged.csv` on a
+join key, first-wins per cell, and prints the `cp` that hands it to step 2.
+`import/import_csv.py` converts that one file. Both run, and the whole chain
+works end to end: extract → merge → import → check → report.
+
+What is left in step 2 is the §3.4 handling — a new taxonomy value is not added
+to `taxonomy.yaml` automatically and a new column produces no stanza in
+`proposals.md` — and tests, of which step 2 has none where step 1 has 21. SPEC
+§3 is the design, §5.4 the merge contract, §10 the acceptance for each step.
 
 Open questions are in SPEC §12. **§12.1** is still live: the taxonomy codes
 have no labels, `taxonomy.yaml` carries `label_de: null` rather than invented

@@ -9,13 +9,13 @@
 ruamel.yaml==0.19.1
 jsonschema==4.26.0
 duckdb==1.5.5
-pytest==8.4.2
+pytest==9.0.3
 
 # M3 (Excel). openpyxl is the only way to write xlsx here; LibreOffice is not
 # an option (SPEC 11). Pillow is openpyxl's hard dependency for embedding the
 # chart PNGs on the dashboard sheet - without it ws.add_image raises.
 openpyxl==3.1.5
-pillow==11.3.0
+pillow==12.3.0
 
 # M4 (TXT + PNG). matplotlib renders the charts once, as PNG, and everything
 # else embeds them (SPEC 2). Pinned to the patch: matplotlib shifts layout

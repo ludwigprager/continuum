@@ -163,10 +163,15 @@ writing several overlapping CSVs, which is what makes the merge worth running.
 ./shell.sh python3 merge/make_testdata.py
 ```
 
-**It still writes a single xlsx**, left over from the xlsx import that §3
-removed; rewriting it to emit CSVs is part of step 2's work. Until then,
-`import/example-extract.csv` is a converted one, and `import/README.md` walks
-the import through with it.
+It writes **three** files, not one, because one source gives the merge nothing
+to do. They overlap on most projects, disagree on 33 cells, leave gaps each
+other fills, spell one key in the wrong case and include a row with no key at
+all - plus two encodings and two delimiters between them. Running the merge
+over them and reading `merge_conflicts.csv` is the fastest way to see what this
+step is for.
+
+Deterministic: the same seed gives the same three files, so regenerating
+produces no diff.
 
 ## Tests
 

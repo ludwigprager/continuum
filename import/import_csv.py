@@ -1,33 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-legacy-xlsx-import
-==================
+import_csv.py - step 2 of the import. SPEC 3.
+==============================================
 
-Turns a legacy "one row per project" spreadsheet into one YAML file per project,
-without requiring the target schema to be known up front.
+Turns one CSV, one row per project, into one YAML file per project - without
+requiring the target schema to be known up front.
+
+The input is `import/merged.csv`, written by step 1 (see merge/README.md) and
+copied here by hand. There is no xlsx reader: the extracts arrive as CSV, and
+dropping openpyxl is one fewer dependency to carry into the air gap.
 
 Three subcommands, run in this order:
 
-    profile        Read the sheet, infer per-column types, and write
+    profile        Read the CSV, infer per-column types, and write
                    profile.md / profile.json plus starter mapping.yaml and
                    value_map.yaml files for you to edit.
 
     convert        Apply mapping.yaml + value_map.yaml and write
-                   projects/<group>/<id>.yaml, plus import-report.md.
+                   projects/<id>.yaml, plus import-report.md.
 
     derive-schema  Emit a JSON Schema draft built from what was actually
                    found in the data (types + enum candidates).
 
+The edit between profile and convert is the point of the tool, and the only
+manual step: the starter mapping puts every column at the root under a
+slugified name, which is a placeholder, not an answer. See import/README.md.
+
 Design rules:
   * Nothing is ever silently dropped. Unmapped columns land in `_unmapped`,
     unparseable values are kept verbatim and listed in the report.
-  * Output is deterministic, so re-running after the sheet changes produces a
-    clean git diff.
+  * Output is deterministic, so re-running after the extract changes produces
+    a clean git diff.
   * Project ids are stable across runs via id_map.csv.
-  * Only two dependencies: openpyxl and PyYAML.
-
-Author: first draft, expected to be edited.
+  * One dependency: PyYAML.
 """
 
 from __future__ import annotations
@@ -301,20 +307,6 @@ def parse_boolish(value: Any) -> str | None:
 # 4. Sheet loading
 # --------------------------------------------------------------------------
 
-def load_rows_xlsx(path: Path, sheet: str | None) -> tuple[str, list[list[Any]]]:
-    from openpyxl import load_workbook
-
-    # data_only=True gives the values Excel cached for formula cells. If the file
-    # was last written by a tool that does not cache (e.g. openpyxl), those cells
-    # read as None -- open and re-save it in Excel/LibreOffice first.
-    wb = load_workbook(path, read_only=True, data_only=True)
-    ws = wb[sheet] if sheet else wb[wb.sheetnames[0]]
-    rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    name = ws.title
-    wb.close()
-    return name, rows
-
-
 def load_rows_csv(path: Path, encoding: str | None) -> tuple[str, list[list[Any]]]:
     encodings = [encoding] if encoding else ["utf-8-sig", "cp1252", "latin-1"]
     last_err: Exception | None = None
@@ -337,10 +329,15 @@ def load_rows_csv(path: Path, encoding: str | None) -> tuple[str, list[list[Any]
     return path.stem, rows
 
 
-def load_rows(path: Path, sheet: str | None, encoding: str | None) -> tuple[str, list[list[Any]]]:
-    if path.suffix.lower() in {".csv", ".tsv", ".txt"}:
-        return load_rows_csv(path, encoding)
-    return load_rows_xlsx(path, sheet)
+def load_rows(path: Path, encoding: str | None) -> tuple[str, list[list[Any]]]:
+    """CSV only. The xlsx reader is gone (SPEC 3): the extracts arrive as CSV,
+    so openpyxl is one fewer dependency to carry into the air gap."""
+    if path.suffix.lower() == ".xlsx":
+        raise SystemExit(
+            f"{path.name}: there is no xlsx import (SPEC 3). Export the sheet as "
+            f"CSV - ';' delimited and UTF-8 or cp1252 both read fine - and put "
+            f"it in merge/input/.")
+    return load_rows_csv(path, encoding)
 
 
 def score_header_row(row: Sequence[Any]) -> float:
@@ -1130,7 +1127,7 @@ def prepare(args) -> tuple[Path, str, int, list[str], list[list[Any]], list[Colu
     source = Path(args.source)
     if not source.exists():
         raise SystemExit(f"no such file: {source}")
-    sheet, rows = load_rows(source, args.sheet, getattr(args, "encoding", None))
+    sheet, rows = load_rows(source, getattr(args, "encoding", None))
     if not rows:
         raise SystemExit("sheet is empty")
 
@@ -1485,8 +1482,7 @@ def insert_schema(root: dict, path: str, leaf: dict) -> None:
 # --------------------------------------------------------------------------
 
 def add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("source", help="path to the .xlsx / .csv file")
-    p.add_argument("--sheet", help="sheet name (default: first sheet)")
+    p.add_argument("source", help="path to the CSV (normally import/merged.csv)")
     p.add_argument("--header-row", type=int, help="1-based header row (default: auto-detect)")
     p.add_argument("--header-rows", type=int, default=1,
                    help="number of header rows to join (default: 1)")

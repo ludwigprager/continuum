@@ -1,12 +1,11 @@
 # The importer's dependencies, and only those. Pinned exactly.
 #
-# Kept separate from the pipeline image (SPEC 8.1): the import runs rarely
-# and has no business carrying the renderer stack. The pipeline image has no
-# PyYAML - ruamel.yaml is the only YAML library there, so there is one parser
-# with one set of behaviours. (It does carry openpyxl, to WRITE report.xlsx.)
+# Kept separate from the pipeline image (SPEC 8.1): the import runs rarely and
+# has no business carrying the renderer stack. The pipeline image has no PyYAML
+# - ruamel.yaml is the only YAML library there, so there is one parser with one
+# set of behaviours. (It does carry openpyxl, to WRITE report.xlsx.)
 #
-# openpyxl is on its way out of THIS image: SPEC 3 removed the xlsx import, the
-# sources are CSV and `csv` is in the standard library. It is still pinned only
-# because tools/import_xlsx.py has not been replaced yet. Drop it with that file.
-openpyxl==3.1.5
+# openpyxl is NOT here. SPEC 3 removed the xlsx import: the extracts arrive as
+# CSV and `csv` is in the standard library, so this is one fewer dependency to
+# pin, bundle and checksum for the M6 offline bundle.
 PyYAML==6.0.3

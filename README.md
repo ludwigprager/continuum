@@ -15,11 +15,10 @@ and M5 (PDF + PPTX) complete.** All five output formats come out of one model.
 M6 is not built: there is no offline bundle yet, though the `--network=none`
 pipeline run it depends on has been enforced by `./verify.sh` since M1.
 
-**The import is being rebuilt and is the current work.** The source data is
-several overlapping CSV extracts, not one spreadsheet, so the xlsx import is
-gone — xlsx is an output format here and nothing else. The replacement is
-specified in SPEC §3 and §5.4 and is **not yet built**; what this README
-describes under *Importing* is the target, not what runs today.
+**The import is CSV only.** The source data is several overlapping CSV
+extracts, not one spreadsheet; the xlsx import is gone, and xlsx is an output
+format here and nothing else. Both steps run — extract → merge → import →
+validate → report works end to end on a clean checkout.
 
 ## Requirements
 
@@ -109,8 +108,11 @@ reading whatever it read before, so re-cutting an extract cannot change the
 catalogue behind anyone's back. A merge that copied itself onward would be a
 pause, not a gate.
 
-`import/example-extract.csv` is synthetic demo data and
-[`import/README.md`](import/README.md) walks the whole thing through with it.
+`merge/make_testdata.py` generates three synthetic extracts that overlap,
+contradict each other on 33 cells and leave gaps each other fills — enough for
+the merge to have something to show. `import/example-extract.csv` is a single
+committed one for a quick look without generating anything, and
+[`import/README.md`](import/README.md) walks the whole thing through.
 
 ## The pipeline
 
@@ -341,8 +343,7 @@ a typo in the template is an error rather than a section that quietly leaves.
 
 The machine that runs the pipeline has no desktop, and the xlsx, the PDF, the
 deck and the PNGs are all files somebody has to actually open. `./serve.sh`
-puts a directory listing of `out/reports` on a port and prints the URL to
-point a browser at:
+puts a directory listing of `out/reports` on a port and prints the URLs to try:
 
 ```
 $ ./serve.sh --detach
@@ -350,13 +351,9 @@ serving out/reports (read-only) on port 8000, bound to 0.0.0.0
   http://192.168.2.172:8000/         eno1
   http://192.168.2.174:8000/         wlp4s0f0
   http://neptun03:8000/              hostname, if DNS resolves it
-  http://neptun03.local:8000/        mDNS, if avahi or Bonjour is running
 
 stop with ./serve.sh --stop
 ```
-
-`./serve.sh --status` prints the same list for a server that is already up,
-on the port it is actually published on.
 
 ```bash
 ./serve.sh                 # foreground, Ctrl-C to stop
@@ -366,107 +363,11 @@ on the port it is actually published on.
 ./serve.sh --port 9000 --bind 127.0.0.1
 ```
 
-**It finds a free port.** With no `--port` it starts at 8000 and moves up to the
-first one nothing is listening on, saying so:
-
-```
-port 8000 is in use, using 8001 instead
-serving out/reports (read-only) on port 8001, bound to 0.0.0.0
-```
-
-`--status` reads the port off the running container rather than assuming 8000,
-so nothing downstream has to know which one it got.
-
-An explicit `--port` is a request, not a preference: if it is taken, that is an
-error rather than a silent move.
-
-**When the holder is your own server under the other engine, it says so** rather
-than moving up quietly — because the two engines are not interchangeable here:
-
-```
-port 8000 is held by continuum-serve under docker - this repo's own server.
-  It is probably the one you want: a docker-published port is reachable
-  from other machines where a rootless podman one often is not.
-
-      CONTAINER_ENGINE=docker ./serve.sh --status   # its URL
-      CONTAINER_ENGINE=docker ./serve.sh --stop     # or take the port back
-
-  Starting a second one on 8001 anyway; it will answer on this host.
-```
-
-That is the case worth catching. A detached docker server survives a logout,
-podman cannot see it, and silently taking the next port hands back a server that
-answers on the host and times out from everywhere else — the symptom in the
-section below, arrived at by a different road. `--status` and `--stop` are
-engine-scoped for the same reason, so a docker-started server needs
-`CONTAINER_ENGINE=docker ./serve.sh --stop`.
-
-**Every line is a candidate, not a promise.** Which one works depends on what
-the machine holding the browser can resolve and route to, and this machine
-cannot know that. The name is usually the one worth typing - it survives the
-address changing - but a bare hostname often does not resolve across a LAN
-while the `.local` mDNS name does. The port may also be behind a firewall.
-
-`0.0.0.0` in the first line is the **bind** address: it means the server
-listens on every interface. It is not a URL and nothing can be reached at it.
-
-**If it answers on the host but times out from another machine:**
-
-```bash
-CONTAINER_ENGINE=docker ./serve.sh --detach
-```
-
-Rootless podman publishes a port as an ordinary host socket held open by a
-userspace proxy, so it is subject to whatever the host does to incoming
-traffic. Docker installs its own DNAT and accept rules and arrives by a
-different route, so on a host that drops unsolicited inbound traffic the
-docker one is reachable and the podman one is not. A dropped packet times out
-rather than being refused, which is exactly the symptom.
-
-**Measured on a host running ufw**, to show how far apart the two are:
-
-```
-$ sudo ufw status verbose
-Default: deny (incoming), allow (outgoing), deny (routed)
-22/tcp        ALLOW IN  Anywhere
-2049/tcp      ALLOW IN  192.168.2.0/24
-...                                       # 8000 is NOT allowed
-```
-
-The docker-published port answered from another machine anyway. The
-podman-published one timed out. Both were serving the same directory out of
-the same image, on the same host, seconds apart.
-
-That is worth knowing beyond this script: **a docker-published port is open
-whatever ufw says.** Docker's rules are hit before ufw's `INPUT` policy
-applies, so `ufw status` does not describe what is actually reachable. If you
-are relying on the host firewall to keep this listing off a network, use
-podman - it is the one that obeys - or bind to loopback and tunnel:
-
-```bash
-./serve.sh --bind 127.0.0.1                        # on the server
-ssh -N -L 8000:127.0.0.1:8000 user@host            # from the other machine
-```
-
-The tunnel needs no root and no firewall change, works under either engine,
-and fixes the "no authentication" problem at the same time, because nothing is
-exposed on the LAN at all.
-
-To open the port properly instead, scoped to the subnet rather than the world:
-
-```bash
-sudo ufw allow from 192.168.2.0/24 to any port 8000 proto tcp
-```
-
-`ss -ltn` shows it: docker binds `0.0.0.0:8000`, rootless podman shows
-`*:8000`. Both answer `curl` **on the host** — that connection never leaves
-the machine, so testing from the host proves nothing here. Only a browser
-elsewhere settles it.
-
-The other fix is opening the port on the host firewall, which needs root and
-is the operator's call. Podman stays the default engine everywhere else
-(SPEC 6.5); this is the documented override for the one entry point that has
-to be reachable from outside.
+Every line is a candidate, not a promise: which one works depends on what the
+machine holding the browser can resolve and route to, and this machine cannot
+know that. With no `--port` it starts at 8000 and moves up to the first free
+one, saying so. `--status` reads the port off the running container, so it is
+right whichever one it got.
 
 It is `python3 -m http.server` out of the pipeline image rather than the
 nginx:alpine SPEC 8.3 sketched. The pipeline image is already built, already
@@ -490,6 +391,11 @@ Two things to know before pointing anyone at it:
 them rather than trying to display them - which is what you want, since they
 are opened in Excel and PowerPoint. The PDF, the PNGs and `report.txt` render
 in the browser.
+
+`out/reports/` is never pruned (SPEC 12.5), so old dates accumulate and
+`fixtures/` from `./verify.sh` sits alongside them. Clear the stale ones before
+pointing anyone at the listing; `fixtures/` is test data and looks like a
+report from a browser.
 
 `docker compose --profile serve up -d serve` is the same thing for people who
 prefer compose.
@@ -547,6 +453,105 @@ Config, not code. In `reports/daily.yaml`:
 A column named here that is absent from the data renders `n/a`
 (`"available": false` plus a note) rather than crashing — `by_backup_class` in
 `daily.yaml` is a permanent test of that path.
+
+## Adding or changing project data
+
+After the bootstrap, `projects/` **is** the system of record and the extracts
+are history. New projects and corrections arrive as YAML — teams edit their own
+file and submit a merge request — not from another import.
+
+### Adding a project
+
+One file, `projects/<id>.yaml`, flat in the directory. The id is the filename
+and must match the `id:` inside. **Only two fields are required:**
+
+```yaml
+schema_version: 1
+id: partnerportal
+```
+
+That validates. Everything else is optional and can be filled in later, which
+is deliberate (SPEC §2): a team that cannot submit a half-filled file keeps its
+data in a private spreadsheet and you never see it.
+
+A fuller one, showing the shapes that trip people up:
+
+```yaml
+schema_version: 1
+id: partnerportal
+name: Partnerportal
+ownership:
+  team_id: team-beta            # must exist in schema/teams.yaml
+classification:
+  security_class: S3            # a code from schema/taxonomy.yaml
+datastores:                     # a list: one entry per engine
+  - engine: db2
+    version: "11.5"             # QUOTED - 7.9 unquoted is a float
+placement:
+  environments:
+    - datacenter: muc-01        # must exist in schema/sites.yaml
+      os:
+        family: windows
+platform:
+  cpu_cores: 16
+  storage_gb: 500
+migration:
+  strategy: replatform
+  status: assessed
+```
+
+Then:
+
+```bash
+./check.sh                      # 0 errors, or it tells you file, line and fix
+git add projects/partnerportal.yaml && git commit
+```
+
+### The rules worth knowing before you type
+
+- **Missing is not zero.** Leave a field out, or write `null`, or write
+  `unknown` — all three mean "nobody has answered", and none of them counts
+  toward coverage. Never write `0` to mean "not established".
+- **No booleans.** Use `full` / `partial` / `none` / `unknown`. `yes` and `no`
+  are YAML 1.1 booleans and parse as `True`/`False` (SPEC §9).
+- **Quote every version.** `"11.5"`, `"2016"`, `"7.9"`. Unquoted they become
+  floats and integers, and a PDF eventually prints `7.9000000000000004`.
+- **Coded fields take codes, not labels.** `S3`, not `Vertraulich`;
+  `muc-01`, not `München 01`. The valid set for each is in
+  `schema/taxonomy.yaml`, `sites.yaml` and `teams.yaml` — and the error message
+  lists them when you get one wrong.
+- **A typo in a field name is an error, not a silent no-op.**
+  `secrutiy_class` fails validation rather than vanishing, because
+  `additionalProperties: false` is set at every level.
+
+### Finding out what may go in a file
+
+`schema/project.schema.yaml` is the list of what exists — every field, its
+type, and whether it counts toward coverage. Reading it beats guessing, and it
+carries the recipe for changing it at the top.
+
+To see what a *complete* file looks like, `tests/fixtures/projects/` holds a
+dozen hand-written ones covering the edge cases: minimal, all-unknown,
+all-null, umlauts, multi-environment, both `placement` shapes.
+
+### Correcting imported data
+
+Imported values are `_meta.confidence: imported`, which means **nobody has
+looked at them**. When somebody has:
+
+```yaml
+_meta:
+  confidence: verified
+  last_reviewed: 2026-09-15
+  reviewed_by: s.bauer
+```
+
+Raw coverage and verified coverage are reported as two separate numbers
+everywhere (SPEC §11), so this is visible in the report the next morning.
+
+Values the importer could not place sit in `_unmapped` verbatim. Promoting one
+into a real field is an edit to `schema/project.schema.yaml` — see the next
+section.
 
 ## Adding or changing a field
 

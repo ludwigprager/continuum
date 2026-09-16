@@ -9,9 +9,9 @@ and produce all five formats: `report.xlsx`, `report.pdf`, `deck.pptx`,
 `report.txt` and the chart PNGs. What remains is the offline bundle (M6).
 See 10 for the state of each.
 
-**The import has been reopened and is the current work.** The source data is
-several overlapping CSV extracts, not one spreadsheet: 3 is the new design and
-5.4 is the merge contract. Nothing downstream of `projects/` changes.
+**The import has been rebuilt.** The source data is several overlapping CSV
+extracts, not one spreadsheet: 3 is the design and 5.4 the merge contract. Both
+steps run and the xlsx path is gone. Nothing downstream of `projects/` changed.
 
 Read this whole document before writing code. The **Contracts** and **Do not**
 sections are the parts that will cost the most to get wrong.
@@ -60,14 +60,15 @@ where the two can silently disagree.
 
 ## 3. The import
 
-`import_csv.py` — converts the legacy CSV extracts into per-project YAML. It is
+`import/import_csv.py` — converts the merged CSV into per-project YAML. It is
 the **bootstrap**: it runs to populate `projects/`, after which the YAML is the
 system of record (§2) and the CSVs are history. Dependencies: `PyYAML` and the
 standard library — `csv` is in it. No network access.
 
-**There is no xlsx import.** The legacy extracts arrive as CSV. `openpyxl`
-leaves `Dockerfile.import` with it, which is one fewer dependency to carry into
-the air gap, and `merge/make_testdata.py` generates CSVs.
+**There is no xlsx import.** The legacy extracts arrive as CSV. The reader
+refuses a `.xlsx` by name and says why; `openpyxl` is out of
+`Dockerfile.import`, which is one fewer dependency to carry into the air gap;
+and `merge/make_testdata.py` generates CSVs.
 
 ### 3.1 Two steps, and a file you can look at
 
@@ -1158,10 +1159,9 @@ scaled; the rest follow the master.
 bare, in the PDF and the deck as they already did in the charts. Inventing
 words was not on the table.
 
-**Not a milestone of its own, and REOPENED by §3:** `import.sh` and
-`docker/Dockerfile.import`. Both run in a container and that part stands, but
-the importer itself is being replaced: the xlsx reader goes and the
-import becomes two steps (§3.1).
+**Not a milestone of its own, and DONE:** the import, rebuilt as two steps
+(§3.1) with the xlsx reader removed. `import/import.sh` and
+`docker/Dockerfile.import` run in a container as they always did.
 
 **Step 1, `merge/merge_csv.py`. DONE.** Every source CSV in `merge/input/`
 reduced to one `merge/merged.csv` on a `--key` join column, first-wins per cell (§5.4),
@@ -1201,10 +1201,21 @@ anything `merge_csv.py` imports has to be importable there. That is why its
 manifest is JSON while `projects/_import_manifest.yaml`, written by step 2 in
 the import image, is YAML.
 
-**Step 2, `import_xlsx.py` becomes `import_csv.py`.** Reads only `merged.csv`.
-Adds the new-field / new-value handling (§3.4) and the bootstrap refusal
-(§5.4.2). `merge/make_testdata.py` generates several overlapping CSVs rather than one
-spreadsheet. Acceptance: `merged.csv` converts to the expected `projects/`
+**Step 2, `import/import_csv.py`. MOSTLY DONE.** Reads a CSV, normally
+`import/merged.csv`, and refuses a `.xlsx` by name. The bootstrap refusal
+(§5.4.2) is in `import/import.sh`. `merge/make_testdata.py` generates three
+overlapping CSVs into `merge/input/` rather than one spreadsheet, and the whole
+chain runs: extract → merge → import → `./check.sh` → `./report.sh`, five
+formats, 0 errors.
+
+**Still outstanding in step 2:** the §3.4 handling. A new taxonomy value is not
+yet added to `taxonomy.yaml` automatically, and a new column does not yet
+produce a stanza in `proposals.md`; both are done by hand meanwhile, and an
+unmapped column still lands in `_unmapped` verbatim so nothing is lost. There
+are also no tests for step 2 where step 1 has 21 — the two that matter are one
+end-to-end across the seam and one against a real-shaped extract.
+
+The original acceptance: `merged.csv` converts to the expected `projects/`
 tree, a new taxonomy value lands in `taxonomy.yaml` with a null label, a new
 column lands in `_unmapped` with a stanza in `proposals.md`, and a second run
 **refuses**, naming the file count and how to redo the bootstrap (§5.4.2) —
