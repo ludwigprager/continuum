@@ -98,7 +98,9 @@ case "$ACTION" in
         if container_running "$SERVE_CONTAINER"; then
             # The port the container is actually published on, not the
             # default: `--status` after `--port 9000` must not print 8000.
+            # shellcheck disable=SC2119  # bare call is intentional, see lib.sh
             printf 'serving on port %s\n' "$(serve_running_port)"
+            # shellcheck disable=SC2119
             print_urls "$(serve_running_port)"
             exit 0
         fi

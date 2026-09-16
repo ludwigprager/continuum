@@ -40,6 +40,12 @@ DEV_CONTAINER="${DEV_CONTAINER:-continuum-dev}"
 SERVE_CONTAINER="${SERVE_CONTAINER:-continuum-serve}"
 SERVE_PORT="${SERVE_PORT:-8000}"
 
+# The project editor (./edit.sh, SPEC 6.6, M7). A different name and default
+# port from SERVE_*, so both can run at once - the editor is read-write over
+# the catalogue and serve.sh's report browser is unrelated to it.
+EDIT_CONTAINER="${EDIT_CONTAINER:-continuum-edit}"
+EDIT_PORT="${EDIT_PORT:-8001}"
+
 # Exit codes (SPEC 5.3): 0 ok, 1 invalid data, 2 tool/usage error.
 readonly EXIT_TOOL=2
 
@@ -271,11 +277,15 @@ serve_urls() {
 # The port the server is actually published on, which is not necessarily the
 # default: somebody may have started it with --port. Falls back to the default
 # when nothing is running, because the URL is then a suggestion anyway.
+#
+# Takes the container name and fallback port so ./edit.sh can reuse it for
+# its own container instead of a second copy of this lookup. Both are
+# optional - serve.sh calls it bare and gets its own defaults.
 serve_running_port() {
-    local port=""
-    port="$("$ENGINE" port "$SERVE_CONTAINER" 2>/dev/null \
+    local container="${1:-$SERVE_CONTAINER}" fallback="${2:-$SERVE_PORT}" port=""
+    port="$("$ENGINE" port "$container" 2>/dev/null \
             | awk -F: 'NR==1 {print $NF; exit}')"
-    printf '%s' "${port:-$SERVE_PORT}"
+    printf '%s' "${port:-$fallback}"
 }
 
 # --------------------------------------------------------------------------

@@ -1,0 +1,11 @@
+{% extends "base.html.j2" %}
+{% block title %}Neues Projekt{% endblock %}
+{% block content %}
+<h1>Neues Projekt / New project</h1>
+<form method="post" action="/projects">
+  <label>Name<input type="text" name="name" autofocus></label>
+  <label>id (optional - auto-generated from the name if left blank)
+    <input type="text" name="id" pattern="[a-z0-9][a-z0-9-]*"></label>
+  <p class="toolbar"><button type="submit">Anlegen / Create</button></p>
+</form>
+{% endblock %}

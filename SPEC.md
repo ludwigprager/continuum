@@ -42,7 +42,7 @@ central group assesses all of them and reports status **daily** to management.
 | Decision | Reason |
 |---|---|
 | **Git is the system of record.** One YAML file per project, flat in `projects/`. | Versioning, blame and review for free. Teams submit merge requests for their own files. The owning team is `ownership.team_id` inside the file, not the path: teams merge, split and get renamed throughout a migration, and a directory layout turns each of those into a repo reorg where the path and the field can disagree. See the note below on CODEOWNERS. |
-| **Teams hand-edit YAML.** No web UI in v1. | The schema is still moving; a form built now would drift within weeks. A UI is a client of Git, added later if a specific group is provably blocked. |
+| **Teams hand-edit YAML.** No web UI in v1. | The schema is still moving; a form built now would drift within weeks. A UI is a client of Git, added later if a specific group is provably blocked. **Revised (M7):** exactly that condition was hit - one consultant cannot use the CLI or git at all. §6.6 adds a generic form generated from `schema/project.schema.yaml` itself (so it cannot drift from the schema the way a hand-built form would), reached through `./edit.sh`. It changes nothing for anyone who can use git: it only writes local YAML, never runs git, and a human still commits - see §11. |
 | **A derived analytical layer is rebuilt on every run**, never hand-maintained. | DuckDB over jsonl tables in `out/tables/`. Git holds truth and git is the history. **Revised:** this was originally Parquet snapshots holding a time series. There are no trend charts and none are wanted, which was Parquet's only justification here - at ~400 projects the catalogue is about a thousand rows, where columnar storage buys nothing measurable (330 KB/day against 388 KB for jsonl). jsonl is readable, diffable, and one concept fewer. Nothing is carried between runs. |
 | **One report model feeds all five renderers.** | Five renderers each querying the data independently produce five subtly different numbers. |
 | **Charts are rendered once as PNG** and embedded in PDF, PPTX and XLSX. | Same reason. |
@@ -357,6 +357,10 @@ Free text has no vocabulary to extend.
 │   ├── snapshot.py              # BUILD - YAML -> jsonl tables
 │   ├── build_model.py           # BUILD - DuckDB -> report_model.json
 │   ├── make_workbook_template.py # BUILD - the pre-built pivots, run rarely
+│   ├── editor/                  # BUILD - the project editor (§6.6, M7)
+│   │   ├── app.py                #   stdlib http.server, no new dependency
+│   │   ├── formgen.py             #   schema -> form fields, and back
+│   │   └── store.py               #   reads/writes projects/*.yaml, id slugify
 │   └── render/
 │       ├── charts.py            # BUILD - PNG, run first, others embed its output
 │       ├── xlsx.py              # BUILD
@@ -367,7 +371,8 @@ Free text has no vocabulary to extend.
 │   ├── report.typ               # Typst template
 │   ├── deck.potx                # PowerPoint template (placeholder until supplied)
 │   ├── workbook.xlsx            # Excel template holding the pre-built pivots
-│   └── report.txt.j2            # Jinja2
+│   ├── report.txt.j2            # Jinja2
+│   └── editor/                  # Jinja2, the editor's HTML (§6.6, M7)
 ├── docker/
 │   ├── Dockerfile.pipeline
 │   └── Dockerfile.import
@@ -383,6 +388,8 @@ Free text has no vocabulary to extend.
 ├── check.sh                     # entry points, one per job
 ├── snapshot.sh
 ├── report.sh
+├── serve.sh
+├── edit.sh                      # the project editor (§6.5, §6.6, M7)
 ├── verify.sh
 ├── shell.sh
 ├── scripts/
@@ -527,10 +534,15 @@ tools/build_model.py  [--snapshot out/tables/] [--spec reports/daily.yaml] [--sc
                       --out out/reports/<date>/report_model.json [--as-of DATE]
                       [--generated-at ISO]
 tools/render/*.py     --model MODEL.json --out DIR [--lang de|en]
+tools/editor/app.py   [--projects DIR] [--schema DIR] [--port N] [--bind ADDR]
+                      # §6.6, M7. Serves the form; writes YAML only, never
+                      # git; exits 0 on normal shutdown (Ctrl-C).
 ```
 
 Exit codes: `0` ok, `1` validation errors (invalid data), `2` tool/usage error.
-Warnings never change the exit code unless `--strict`.
+Warnings never change the exit code unless `--strict`. `tools/editor/app.py` is
+the one exception: it never has a verdict on the data (SPEC 2, §6.6), so it has
+no exit-code-1 case at all.
 
 ### 5.4 The merge — first wins
 
@@ -853,17 +865,26 @@ and README (§3.1):
 ./snapshot.sh       # flatten projects/ into out/tables/*.jsonl
 ./report.sh         # full pipeline -> out/reports/<date>/
 ./serve.sh          # HTTP directory listing of out/reports, for a browser
+./edit.sh           # form server over projects/*.yaml, for a browser (§6.6, M7)
 ./verify.sh         # tests + a --network=none pipeline run against tests/fixtures
 ./shell.sh          # interactive shell in the pipeline image
 ```
 
-`./serve.sh` is the exception to "nothing needs the network": the machine that
-runs the pipeline has no desktop, so the only way to look at an xlsx or a PNG
-is to open it from a browser elsewhere. It publishes a port, mounts
-`out/reports` read-only and nothing else, and prints the URL. There is no
-authentication - see `--bind`. `./report.sh` says nothing about it: the URL
-does not change between runs, and one more line on every daily run to repeat
-what starting the server already said is noise.
+`./serve.sh` and `./edit.sh` are the two exceptions to "nothing needs the
+network": the machine that runs the pipeline has no desktop, so the only way
+to look at an xlsx or a PNG, or to fill in a form, is to open it from a
+browser elsewhere. `./serve.sh` publishes a port, mounts `out/reports`
+read-only and nothing else, and prints the URL. There is no authentication -
+see `--bind`. `./report.sh` says nothing about it: the URL does not change
+between runs, and one more line on every daily run to repeat what starting
+the server already said is noise.
+
+`./edit.sh` (§6.6) is read-write over the catalogue instead of read-only over
+already-published reports, so an accidentally-reachable instance is a bigger
+deal than `./serve.sh`'s - but it defaults to `0.0.0.0`, same as `./serve.sh`,
+because remote reachability is essential and no authentication was explicitly
+accepted as the tradeoff for that (§12.9). `--bind 127.0.0.1` falls back to
+loopback-only for a run where that trust boundary needs tightening.
 
 Each script is a few lines: source `scripts/lib.sh`, call `run_in_container`.
 **All container knowledge lives in `scripts/lib.sh`** — engine detection, mount
@@ -889,6 +910,47 @@ The pipeline does **not** shell out to `docker compose`: `podman compose` in
 4.x delegates to whichever compose implementation happens to be installed, and
 that is not something to put underneath a pre-commit hook. The scripts call
 `podman run` / `docker run` directly. See §8.3 for what compose is still for.
+
+### 6.6 `edit.sh` / `tools/editor/` — the project editor (M7)
+
+Added for exactly the case §2 named as the trigger: a consultant who cannot
+use git or the CLI at all. Everyone who can use git still hand-edits YAML and
+submits a merge request - this does not change that default path, and does
+not replace it.
+
+- **Schema-driven, like everything else in this pipeline (§6.1.1).** The form
+  is built by `tools/editor/formgen.py` walking `schema/project.schema.yaml`
+  through `validate.Schema.resolve()` - the same `$ref`/`$defs`/annotation
+  resolution `validate.py` itself uses, not a second copy of it. It contains
+  no field name, no code and no enum value. `x-taxonomy` and `x-ref` pick a
+  dropdown's options exactly as they pick a validation rule; a code with no
+  label prints bare, never an invented word (§12.1), same as every renderer.
+- **It is a client of Git, not a replacement for it (§2).** It only writes
+  YAML under `projects/`. It never calls git - no commit, no branch, no merge
+  request. A human runs `git add`/`git commit` themselves after saving,
+  exactly as after a hand edit.
+- **Saving is unconditional.** `validate.validate()` runs after every save and
+  the findings for that one file are shown inline, but nothing here ever
+  refuses to write - §2's "incomplete never fails validation" applies to the
+  editor too. `./check.sh` and the pre-commit hook stay the actual gate, so
+  there is exactly one validation code path.
+- **id allocation does not reach into `import/`.** `import_csv.py` already
+  has slugify/dedupe logic for turning free text into an id, but importing it
+  would couple the editor to the import steps' deliberate self-containment
+  (§3.1), and CLAUDE.md says not to modify `import_csv.py`.
+  `tools/editor/store.py` carries its own small copy instead.
+- **No new dependency.** `docker/requirements.pipeline.txt` already pins
+  `ruamel.yaml` (so an edit preserves comments and key order on an existing
+  file, via the same round-trip loader `validate.make_loader()` uses) and
+  `jinja2` (for the HTML, same as `templates/report.txt.j2`). The server
+  itself is stdlib `http.server` - no framework, matching `merge/`'s
+  stdlib-only precedent.
+- **No auth, like `./serve.sh`, and reachable by default like `./serve.sh`
+  too (§12.9).** A trusted-network assumption, not an enforced one - it binds
+  `0.0.0.0` because remote reachability is essential for this to do its job
+  (the person it's for is not on the host running the container), and no
+  authentication was explicitly accepted as the cost of that. `--bind
+  127.0.0.1` is there for a run where the trust boundary needs tightening.
 
 ## 7. Counting rules — settle this before writing SQL
 
@@ -1247,6 +1309,30 @@ engine and the bundle, `./report.sh` produces all five formats in
 network access, and `out/reports/<date>/manifest.json` records the git sha,
 schema version and image digest that produced them.
 
+**M7 — the project editor, DONE, built ahead of M6 at the user's explicit
+request.** §10 says build one milestone at a time and don't start the next
+one unasked (CLAUDE.md); M7 jumped the queue anyway because the trigger named
+in §2 fired - one consultant cannot use git or the CLI at all - and the user
+asked for it by name, which is the "unasked" clause's own escape hatch. M6
+(the offline bundle) is still the next milestone in the numbered sequence and
+resumes after this.
+
+Acceptance: `./edit.sh` starts a container-backed form server (§6.5, §6.6).
+Opening it lists every file in `projects/` (id, name, team, migration
+status). Creating a project: enter a name, get a slugified id (editable,
+checked for collision), land on a form with every schema field present,
+grouped by the schema's own top-level sections - text, code (dropdown from
+`taxonomy.yaml`/`sites.yaml`/`teams.yaml`, bare code when unlabelled, §12.1),
+count, date, version, array-of-scalar (checkboxes: `storage_classes`,
+`depends_on`) and array-of-object (add/remove rows: `datastores`,
+`placement.environments`, `migration.blockers`) all round-trip. Saving writes
+YAML matching the schema, preserves comments/key order on an existing file
+(ruamel round-trip), and shows `./check.sh`-equivalent findings for that file
+without blocking the save. The tool never calls git: `git status` after
+saving shows exactly the one changed file. No new dependency was needed -
+`ruamel.yaml` and `jinja2` were already pinned for the pipeline image; the
+server is stdlib `http.server`.
+
 ## 11. Do not
 
 - Do not let renderers compute anything. They lay out the model. If a renderer
@@ -1258,7 +1344,11 @@ schema version and image digest that produced them.
 - Do not store computed scores in the project YAML.
 - Do not convert xlsx or pptx to PDF via LibreOffice headless. Render the PDF
   from the model directly.
-- Do not add a web UI.
+- Do not add a web UI, beyond the generic project editor added in M7 (§6.6):
+  that one exists to unblock a specific team member who cannot use git, stays
+  a thin client of Git (writes local YAML, never commits, no git integration
+  of any kind), and is generated from the schema rather than hand-built field
+  by field. It is not a precedent for other UI ideas.
 - Do not treat imported data as verified. Report raw coverage and verified
   coverage as two separate numbers everywhere they appear.
 
@@ -1356,3 +1446,13 @@ Ask before guessing on these; each one changes the shape of the code.
    gitignored, so the status quo answer is no. Decide before the first real
    extract lands, because removing a file from git history afterwards is a
    rewrite, not a delete.
+
+9. **`edit.sh`'s bind default. RESOLVED.** Originally shipped defaulting to
+   `127.0.0.1`, unlike `./serve.sh`'s `0.0.0.0` (§6.5, §6.6), on the reasoning
+   that a loopback default is the safer of the two for a read-write,
+   unauthenticated server. Flipped to `0.0.0.0` (matching `./serve.sh`) once
+   actual use showed the opposite: the person using it is never on the host
+   running the container, so remote reachability is essential, not optional -
+   and no authentication was explicitly accepted as the tradeoff for that.
+   `--bind 127.0.0.1` remains available for a run where the trust boundary
+   needs tightening back down.

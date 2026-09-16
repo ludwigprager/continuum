@@ -40,6 +40,7 @@ Every tool runs in a container.
 ./report.sh                         # snapshot + model + all five formats -> out/reports/<date>/
 ./report.sh --lang en               # same, English labels
 ./serve.sh --detach                 # browse out/reports from another machine
+./edit.sh                           # form editor for projects/*.yaml, in a browser
 ./shell.sh                          # interactive shell in the pipeline image
 ```
 
@@ -554,6 +555,41 @@ everywhere (SPEC §11), so this is visible in the report the next morning.
 Values the importer could not place sit in `_unmapped` verbatim. Promoting one
 into a real field is an edit to `schema/project.schema.yaml` — see the next
 section.
+
+## Editing project data in a browser
+
+```bash
+./edit.sh                    # reachable on the LAN by default - see below
+./edit.sh --bind 127.0.0.1   # loopback only, e.g. plus an SSH tunnel
+./edit.sh --stop
+```
+
+Hand-editing YAML and submitting a merge request is still the default way to
+add or change a project (SPEC §2) — this exists for the specific case a team
+member cannot use the CLI or git at all. It generates a form from
+`schema/project.schema.yaml` itself (the same schema `./check.sh` validates
+against), so it cannot drift out of sync with it the way a hand-built form
+would.
+
+**It only writes YAML under `projects/`. It never runs git.** After creating
+or saving a project, `git status` shows the one changed file, same as a hand
+edit — `git add`/`git commit` is still a separate, manual step. Saving never
+blocks on validation: the findings shown after a save are informational, the
+same ones `./check.sh` would report, and `./check.sh` (or the pre-commit
+hook) is still the real gate before a commit lands.
+
+The rules in "The rules worth knowing before you type" above still apply —
+the form encodes most of them (coded fields are dropdowns, versions and
+counts are typed correctly), but not the judgement calls, like when a value
+actually counts as `verified` rather than merely edited.
+
+**No authentication**, matching `./serve.sh`'s existing no-auth, trusted-network
+precedent, and `--bind 0.0.0.0` by default like `./serve.sh` too: remote
+reachability is essential (the person this is for is not on the host running
+the container), and no authentication was explicitly accepted as the
+tradeoff. Anyone who can reach the port can create, edit and corrupt project
+data — `--bind 127.0.0.1` falls back to loopback-only, plus an SSH tunnel,
+for a run where that needs tightening.
 
 ## Adding or changing a field
 

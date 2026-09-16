@@ -80,3 +80,25 @@ services:
     command:
       ["sh", "-c",
        "exec python3 -m http.server \"${SERVE_PORT:-8000}\" --bind 0.0.0.0 --directory /work"]
+
+  # The project editor (./edit.sh, SPEC 6.6, M7), for people who prefer
+  # compose. Behind its own profile for the same reason as `serve`: it is the
+  # other service here that listens on a network.
+  #
+  # Unlike `serve` this one is read-write (it writes projects/*.yaml) and not
+  # `read_only`. Binds 0.0.0.0 by default, same as `serve` - SPEC 12.9:
+  # remote reachability is essential, and no authentication was explicitly
+  # accepted as the tradeoff. Override EDIT_BIND=127.0.0.1 to fall back to
+  # loopback-only for a given run. It never runs git - see edit.sh's header.
+  edit:
+    profiles: [edit]
+    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    container_name: continuum-edit
+    ports:
+      - "${EDIT_BIND:-0.0.0.0}:${EDIT_PORT:-8001}:${EDIT_PORT:-8001}"
+    volumes:
+      - .:/work:z
+    working_dir: /work
+    command:
+      ["sh", "-c",
+       "exec python3 tools/editor/app.py --port \"${EDIT_PORT:-8001}\" --bind 0.0.0.0"]

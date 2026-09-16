@@ -1,0 +1,79 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ pid }}{% endblock %}
+
+{% macro render_field(f) %}
+<label>{{ f.label }}
+  {%- if f.type == 'select' %}
+  <select name="{{ f.name }}">
+    <option value=""></option>
+    {% for code, label in f.options %}
+    <option value="{{ code }}" {% if code == f.value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {%- elif f.type == 'checkboxes' %}
+  <span>
+    {% for opt in f.options %}
+    <label style="display:inline-block;font-weight:normal;margin-right:.75rem">
+      <input type="checkbox" name="{{ f.name }}" value="{{ opt.code }}" {% if opt.checked %}checked{% endif %}>
+      {{ opt.label }}
+    </label>
+    {% endfor %}
+  </span>
+  {%- elif f.type == 'number' %}
+  <input type="text" inputmode="numeric" name="{{ f.name }}" value="{{ f.value }}" placeholder="Zahl, oder unknown">
+  {%- else %}
+  <input type="text" name="{{ f.name }}" value="{{ f.value }}">
+  {%- endif %}
+</label>
+{% endmacro %}
+
+{% macro render_group(g) %}
+<div class="row" style="display:block">
+  <div class="hint">{{ g.label }}</div>
+  <div id="rows-{{ g.dom_id }}">
+    {% for row in g.rows %}
+    <div class="group-row">
+      <button type="button" class="remove-row" onclick="this.closest('.group-row').remove()">&times;</button>
+      <div class="row">
+        {% for f in row.fields %}{{ render_field(f) }}{% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <template id="tpl-{{ g.dom_id }}"><div class="group-row">
+      <button type="button" class="remove-row" onclick="this.closest('.group-row').remove()">&times;</button>
+      <div class="row">
+        {% for f in g.template_row %}{{ render_field(f) }}{% endfor %}
+      </div>
+  </div></template>
+  <p><button type="button" onclick="addRow('{{ g.dom_id }}')">+ {{ g.label }}</button></p>
+</div>
+{% endmacro %}
+
+{% block content %}
+<h1>{{ pid }}</h1>
+
+{% if saved %}<p class="finding saved">gespeichert / saved</p>{% endif %}
+{% for f in findings %}
+<p class="finding {{ f.level }}">{{ f.level }}: {{ f.message }}{% if f.line %} ({{ f.file }}:{{ f.line }}){% endif %}</p>
+{% endfor %}
+
+<form method="post" action="/projects/{{ pid }}/edit">
+{% for section in sections %}
+  <fieldset>
+    <legend>{{ section.label }}</legend>
+    {% for item in section.elements %}
+      {% if item.type == 'group' %}{{ render_group(item) }}{% else %}{{ render_field(item) }}{% endif %}
+    {% endfor %}
+  </fieldset>
+{% endfor %}
+  <p class="toolbar"><button type="submit">Speichern / Save</button></p>
+</form>
+
+{% if unmapped %}
+<fieldset>
+  <legend>_unmapped (read-only - SPEC 3.4)</legend>
+  <pre>{{ unmapped }}</pre>
+</fieldset>
+{% endif %}
+{% endblock %}

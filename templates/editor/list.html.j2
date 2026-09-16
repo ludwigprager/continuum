@@ -1,0 +1,24 @@
+{% extends "base.html.j2" %}
+{% block title %}Projekte{% endblock %}
+{% block content %}
+<h1>Projekte / Projects</h1>
+<p class="toolbar"><a class="button" href="/projects/new">+ Neues Projekt / New project</a></p>
+<table>
+<tr><th>id</th><th>Name</th><th>Team</th><th>Migration status</th></tr>
+{% for p in projects %}
+<tr>
+  <td><a href="/projects/{{ p.id }}/edit">{{ p.id }}</a></td>
+  <td>{{ p.name }}</td>
+  <td>{{ p.team_id }}</td>
+  <td>{{ p.migration_status }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4"><em>no projects yet</em></td></tr>
+{% endfor %}
+</table>
+<p class="hint">
+  This only writes YAML under <code>projects/</code>. Committing to git is a
+  separate, manual step - <code>git status</code> after saving, then
+  <code>git add</code> / <code>git commit</code>.
+</p>
+{% endblock %}

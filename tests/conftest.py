@@ -22,7 +22,7 @@ from pathlib import Path
 from types import ModuleType
 
 REPO = Path(__file__).resolve().parent.parent
-for directory in (REPO / "tools", REPO / "tools" / "render"):
+for directory in (REPO / "tools", REPO / "tools" / "render", REPO / "tools" / "editor"):
     if str(directory) not in sys.path:
         sys.path.append(str(directory))
 
