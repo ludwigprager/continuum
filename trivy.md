@@ -61,15 +61,15 @@ podman run --rm \
   -v "/run/user/$(id -u)/podman/podman.sock:/run/podman/podman.sock:z" \
   -v trivy-cache:/root/.cache \
   "$TRIVY_IMAGE" \
-  image --podman-host /run/podman/podman.sock \
-  "continuum-pipeline:$V"
+  image --image-src podman --podman-host /run/podman/podman.sock \
+  "localhost/continuum-pipeline:$V"
 
 podman run --rm \
   -v "/run/user/$(id -u)/podman/podman.sock:/run/podman/podman.sock:z" \
   -v trivy-cache:/root/.cache \
   "$TRIVY_IMAGE" \
-  image --podman-host /run/podman/podman.sock \
-  "continuum-import:$V"
+  image --image-src podman --podman-host /run/podman/podman.sock \
+  "localhost/continuum-import:$V"
 ```
 
 The `:z` on the socket mount relabels it for SELinux hosts, the same reason
@@ -81,6 +81,21 @@ Trivy reads the image straight out of Podman's store over the socket; nothing
 needs to be exported to a tarball and nothing needs mounting from
 `/var/lib/containers/storage`.
 
+**Two details that matter, both from hitting them:**
+
+- **Name the image with its `localhost/` prefix.** Podman stores a locally
+  built, unpushed image as `localhost/continuum-pipeline:0.5.0` (check with
+  `podman images`), but Trivy's client normalizes a bare
+  `continuum-pipeline:0.5.0` to `docker.io/library/...` before asking the
+  socket for it — a mismatch, not a missing image. Without the prefix, Trivy
+  fails to find it on `podman`, falls through to `docker` and `containerd`
+  (neither present here), and ends by actually trying to pull the name from
+  Docker Hub, which is where the `UNAUTHORIZED` comes from.
+- **`--image-src podman`** skips the `docker`/`containerd`/`remote` probing
+  entirely (Trivy's default tries all four in order) — worth it since here
+  only `podman` will ever succeed, and the failed docker-socket and
+  containerd-socket attempts add nothing but noise to the output.
+
 ## 3. A shell function, if you'll do this often
 
 ```bash
@@ -89,15 +104,15 @@ trivy-podman() {
         -v "/run/user/$(id -u)/podman/podman.sock:/run/podman/podman.sock:z" \
         -v trivy-cache:/root/.cache \
         docker.io/aquasec/trivy:0.74.0 \
-        image --podman-host /run/podman/podman.sock \
+        image --image-src podman --podman-host /run/podman/podman.sock \
         "$@"
 }
 ```
 
 ```bash
 V=$(cat VERSION)
-trivy-podman "continuum-pipeline:$V"
-trivy-podman --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed "continuum-import:$V"
+trivy-podman "localhost/continuum-pipeline:$V"
+trivy-podman --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed "localhost/continuum-import:$V"
 ```
 
 ## Alternative: no persistent socket
@@ -113,8 +128,8 @@ podman run --rm \
   -v "$SOCKET:/run/podman/podman.sock:z" \
   -v trivy-cache:/root/.cache \
   docker.io/aquasec/trivy:0.74.0 \
-  image --podman-host /run/podman/podman.sock \
-  "continuum-pipeline:$(cat VERSION)"
+  image --image-src podman --podman-host /run/podman/podman.sock \
+  "localhost/continuum-pipeline:$(cat VERSION)"
 
 kill "$PID"
 ```
@@ -123,13 +138,13 @@ kill "$PID"
 
 ```bash
 # fail on real, fixable severities only
-trivy-podman --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed "continuum-pipeline:$V"
+trivy-podman --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed "localhost/continuum-pipeline:$V"
 
 # vulnerabilities + secrets + misconfig in one pass
-trivy-podman --scanners vuln,secret,misconfig "continuum-pipeline:$V"
+trivy-podman --scanners vuln,secret,misconfig "localhost/continuum-pipeline:$V"
 
 # machine-readable, for CI
-trivy-podman --format json --output pipeline-scan.json "continuum-pipeline:$V"
+trivy-podman --format json --output pipeline-scan.json "localhost/continuum-pipeline:$V"
 ```
 
 ## Offline scanning (matches this project's air-gap model)
@@ -145,7 +160,7 @@ podman run --rm -v trivy-cache:/root/.cache docker.io/aquasec/trivy:0.74.0 \
     image --download-db-only
 
 # carry the trivy-cache volume in (podman volume export/import), then inside:
-trivy-podman --skip-db-update --offline-scan "continuum-pipeline:$V"
+trivy-podman --skip-db-update --offline-scan "localhost/continuum-pipeline:$V"
 ```
 
 To move the volume across the gap:
