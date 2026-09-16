@@ -20,3 +20,5 @@
 # example-extract.csv is tracked too: it is invented demo data, not a real
 # extract, so committing it does not touch SPEC 12.8. README.md walks the
 # import through with it.
+
+import-report.md

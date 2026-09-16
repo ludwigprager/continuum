@@ -9,3 +9,8 @@
 # Whether the extracts themselves are committed is SPEC 12.8 and still open.
 # They are the evidence behind every project file, but may carry contact data,
 # and merge_manifest.json records each one's sha256 either way.
+
+01-sap-export.csv
+02-cmdb-dump.csv
+03-team-umfrage.csv
+

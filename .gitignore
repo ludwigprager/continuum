@@ -9,3 +9,7 @@ projekte.xlsx
 
 # The import's own derived files are ignored by merge/.gitignore and
 # import/.gitignore, beside the files they describe.
+
+# This repo is the pipeline, not a specific migration: real project data
+# (the bootstrap output of ./import/import.sh convert) is not committed here.
+/projects/
