@@ -54,7 +54,7 @@ changes version between runs is the same trap. Check
 update the tag below when you bump it deliberately.
 
 ```bash
-TRIVY_IMAGE=docker.io/aquasec/trivy:0.68.0
+TRIVY_IMAGE=docker.io/aquasec/trivy:0.74.0
 V=$(cat VERSION)
 
 podman run --rm \
@@ -88,7 +88,7 @@ trivy-podman() {
     podman run --rm \
         -v "/run/user/$(id -u)/podman/podman.sock:/run/podman/podman.sock:z" \
         -v trivy-cache:/root/.cache \
-        docker.io/aquasec/trivy:0.68.0 \
+        docker.io/aquasec/trivy:0.74.0 \
         image --podman-host /run/podman/podman.sock \
         "$@"
 }
@@ -112,7 +112,7 @@ PID=$!
 podman run --rm \
   -v "$SOCKET:/run/podman/podman.sock:z" \
   -v trivy-cache:/root/.cache \
-  docker.io/aquasec/trivy:0.68.0 \
+  docker.io/aquasec/trivy:0.74.0 \
   image --podman-host /run/podman/podman.sock \
   "continuum-pipeline:$(cat VERSION)"
 
@@ -141,7 +141,7 @@ Pre-fetch it into the cache volume outside the air gap, then scan with
 
 ```bash
 # outside, once
-podman run --rm -v trivy-cache:/root/.cache docker.io/aquasec/trivy:0.68.0 \
+podman run --rm -v trivy-cache:/root/.cache docker.io/aquasec/trivy:0.74.0 \
     image --download-db-only
 
 # carry the trivy-cache volume in (podman volume export/import), then inside:
