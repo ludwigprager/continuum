@@ -9,6 +9,8 @@ Everything derived — snapshots, the report model, the five output formats — 
 rebuilt from those files and never hand-maintained.
 
 `SPEC.md` is the design document. This README is the operating manual.
+[`DEVELOPMENT.de.md`](DEVELOPMENT.de.md) is the German howto for the daily
+tasks: adding projects, filling in data, changing the schema, backing up.
 
 **Status: M1 (validation), M2 (snapshot + model), M3 (Excel), M4 (TXT + PNG)
 and M5 (PDF + PPTX) complete.** All five output formats come out of one model.
@@ -33,7 +35,7 @@ Every tool runs in a container.
 ./check.sh --check-schema           # validate the schema and reference files
 ./check.sh                          # validate projects/ - see below
 ./merge/merge.sh --key "Projekt-Nr" # step 1: merge/input/*.csv -> merged.csv
-./import/import.sh convert                 # step 2: merged.csv -> projects/ (not built)
+./import/import.sh convert                 # step 2: merged.csv -> projects/
 ./snapshot.sh                       # projects/ -> out/tables/*.jsonl
 ./report.sh                         # snapshot + model + all five formats -> out/reports/<date>/
 ./report.sh --lang en               # same, English labels
@@ -95,7 +97,7 @@ cp merge/merged.csv import/merged.csv #         the copy is yours to make
 | step | where | what it does |
 |---|---|---|
 | 1 | **[`merge/`](merge/README.md)** | every `*.csv` in `merge/input/` reduced to one `merged.csv`, first wins per cell. Built |
-| 2 | **[`import/`](import/README.md)** | that one file turned into `projects/*.yaml`. Not built yet |
+| 2 | **[`import/`](import/README.md)** | that one file turned into `projects/*.yaml`. Built, minus the §3.4 handling |
 
 Each directory holds its own tool, tests, fixtures and documentation, so the
 rules live beside the files they govern. The counting rules the merge applies
@@ -567,7 +569,7 @@ instructions are in front of whoever is editing it.
 ```
 
 Then `./check.sh --check-schema`. That is the whole change — validation,
-referential integrity, coverage, the Parquet schema, the report model and the
+referential integrity, coverage, the jsonl tables, the report model and the
 Excel sheet all follow from it. No Python.
 
 `schema/project.schema.yaml` is YAML, not JSON, because the people who

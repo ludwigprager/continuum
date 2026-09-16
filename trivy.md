@@ -38,6 +38,32 @@ artifact in this repo lands (SPEC 4). `--output` inside the Trivy container
 only writes inside that container, so getting a file onto the host means
 mounting a directory for it — every command below does that.
 
+## HTML, for reading in a browser instead of `jq`
+
+`--format json` (the default) also gets an `out/scans/<image>-<version>.html`
+next to the `.json` — the same report, rendered with the Trivy image's own
+`/contrib/html.tpl` template via `trivy convert`, which reads the json file
+already on disk instead of re-scanning:
+
+```bash
+podman run --rm \
+  -v "$(pwd)/out/scans:/out:z" \
+  docker.io/aquasec/trivy:0.74.0 \
+  convert --format template --template "@/contrib/html.tpl" \
+  --output "/out/continuum-pipeline-$V.html" "/out/continuum-pipeline-$V.json"
+```
+
+No socket needed for this step — `convert` only reads and writes files, it
+does not talk to Podman. `--format table` skips it: there is no json report
+to convert from.
+
+**Open it with `./serve.sh`:** `out/scans/` is not `out/reports/`
+(`serve.sh`'s default), but `--root` takes any directory under the repo:
+
+```bash
+./serve.sh --root out/scans
+```
+
 ## Build the images first
 
 ```bash

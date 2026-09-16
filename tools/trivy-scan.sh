@@ -13,8 +13,19 @@
 #   tools/trivy-scan.sh                     # scan both project images
 #   tools/trivy-scan.sh continuum-pipeline  # scan just one
 #   tools/trivy-scan.sh --format table      # human-readable instead of json
+#   tools/trivy-scan.sh --gate              # CI gate: fail (exit 1) only on
+#                                            # fixable HIGH/CRITICAL CVEs
 #   tools/trivy-scan.sh -- --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed
 #                                            # extra flags, passed to `trivy image`
+#                                            # (--gate is shorthand for exactly this)
+#
+# --gate exists because "any CRITICAL CVE" is not a gate that can ever pass: a
+# base Debian image reliably carries a handful with no fix published yet (this
+# repo's own continuum-pipeline image currently does - libsqlite3-0, perl-base,
+# zlib1g, all upstream-unfixed, nothing a Dockerfile change here can act on).
+# --ignore-unfixed is what makes the gate about vulnerabilities that can
+# actually be remediated by rebuilding, rather than blocking forever on ones
+# that can't. --gate and a trailing `-- ...` are mutually exclusive - pick one.
 #
 # Requires the Podman socket:
 #   systemctl --user enable --now podman.socket   # rootless (this host)
@@ -24,6 +35,13 @@
 # same as every other run's output in this repo (SPEC 4: out/ is gitignored).
 # A log per image lands next to it (<image>-<version>.log), because Trivy's
 # INFO/WARN lines otherwise vanish with the terminal.
+#
+# --format json also gets an out/scans/<image>-<version>.html rendering,
+# via `trivy convert` against the json file already on disk - not a second
+# scan, and not a hand-rolled JSON->HTML conversion: the trivy image ships
+# /contrib/html.tpl (aquasecurity/trivy's own template) for exactly this.
+# Browse it with ./serve.sh --root out/scans (SPEC's serve.sh takes any
+# directory under the repo, out/reports is only its default).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,10 +50,12 @@ V="$(cat VERSION)"
 FORMAT="json"
 IMAGES=()
 EXTRA_ARGS=()
+GATE=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --format)  FORMAT="$2"; shift 2 ;;
+        --gate)    GATE=1; shift ;;
         --)        shift; EXTRA_ARGS+=("$@"); break ;;
         -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
         -*)        echo "tools/trivy-scan.sh: unknown flag $1" >&2; exit 2 ;;
@@ -43,6 +63,12 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ ${#IMAGES[@]} -gt 0 ] || IMAGES=(continuum-pipeline continuum-import)
+
+if [ "$GATE" = 1 ]; then
+    [ ${#EXTRA_ARGS[@]} -eq 0 ] \
+        || { echo "tools/trivy-scan.sh: --gate already sets --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 - don't combine it with '-- ...'" >&2; exit 2; }
+    EXTRA_ARGS=(--severity HIGH,CRITICAL --ignore-unfixed --exit-code 1)
+fi
 
 case "$FORMAT" in
     json)  EXT="json" ;;
@@ -97,6 +123,7 @@ log_shows_real_scan() {
 }
 
 rc=0
+any_html=0
 for image in "${IMAGES[@]}"; do
     ref="localhost/${image}:${V}"
     dest="out/scans/${image}-${V}.${EXT}"
@@ -113,9 +140,21 @@ for image in "${IMAGES[@]}"; do
         "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" \
         "$ref" 2> >(tee "$log" >&2) || st=$?
     if [ "$st" -ne 0 ]; then
-        echo "tools/trivy-scan.sh: scan of $ref failed (exit $st)" >&2
-        rc=$st
-        continue
+        # --gate's --exit-code 1 fires for the same reason a real tool
+        # failure would (both exit 1), so exit status alone can't tell them
+        # apart. log_shows_real_scan can: it means Trivy got as far as
+        # scanning packages, so exit 1 here is the gate result, not a crash -
+        # the scan still ran and $dest is still worth keeping and converting.
+        if [ "$GATE" = 1 ] && log_shows_real_scan "$log"; then
+            echo "tools/trivy-scan.sh: GATE FAILED for $ref - fixable HIGH/CRITICAL vulnerabilities found, see $dest" >&2
+            rc=1
+        else
+            echo "tools/trivy-scan.sh: scan of $ref failed (exit $st)" >&2
+            rc=$st
+            continue
+        fi
+    elif [ "$GATE" = 1 ]; then
+        echo "tools/trivy-scan.sh: gate OK for $ref - no fixable HIGH/CRITICAL vulnerabilities" >&2
     fi
     if [ "$FORMAT" = "json" ]; then
         settled=0
@@ -131,6 +170,33 @@ for image in "${IMAGES[@]}"; do
                 rc=1
             fi
         fi
+
+        html="out/scans/${image}-${V}.html"
+        echo "converting $dest -> $html" >&2
+        html_ok=1
+        if ! podman run --rm \
+                -v "$(pwd)/out/scans:/out:z" \
+                "$TRIVY_IMAGE" \
+                convert --format template --template "@/contrib/html.tpl" \
+                --output "/out/${image}-${V}.html" "/out/${image}-${V}.json" \
+                2>>"$log"; then
+            echo "tools/trivy-scan.sh: html conversion of $dest failed" >&2
+            rc=1
+            html_ok=0
+        else
+            any_html=1
+        fi
+        if [ "$html_ok" = 1 ] && [ "$settled" -ne 1 ] && log_shows_real_scan "$log"; then
+            # $html was rendered from $dest while $dest still hadn't cleared
+            # the same read-after-write race (warned about above), so it
+            # likely shows the same null Vulnerabilities. Not worth a second
+            # retry loop for a file that is cheap to regenerate once $dest
+            # itself settles.
+            echo "tools/trivy-scan.sh: WARNING: $html was converted from $dest before that race cleared - once \`jq '.Results[].Vulnerabilities' $dest\` shows real data, redo just the conversion: podman run --rm -v \"\$(pwd)/out/scans:/out:z\" $TRIVY_IMAGE convert --format template --template \"@/contrib/html.tpl\" --output \"/out/${image}-${V}.html\" \"/out/${image}-${V}.json\"" >&2
+        fi
     fi
 done
+if [ "$any_html" = 1 ]; then
+    echo "browse the html report(s):  ./serve.sh --root out/scans" >&2
+fi
 exit "$rc"

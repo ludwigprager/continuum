@@ -4,7 +4,7 @@ Das Reporting-Pipeline für **Projekt Continuum**, beschrieben in `continuum.md`
 
 Git ist das einzig gültige System: Eine YAML-Datei pro Projekt, flach in `projects/`. Alles Abgeleitete — Snapshots, der Berichtsmodell, die fünf Ausgabeformate — wird aus diesen Dateien neu aufgebaut und nie per Hand gewartet.
 
-`SPEC.md` ist das Design-Dokument. Diese README ist das Betriebsanleitung.
+`SPEC.md` ist das Design-Dokument. Dieses Dokument ist die Anleitung für den täglichen Betrieb.
 
 ## Entwicklungsprozess
 
@@ -41,7 +41,7 @@ Podman (bevorzugt) oder Docker. Nichts anderes – keine Python, keine pip auf d
 ./check.sh --check-schema           # validiere das Schema und die Referenzdateien
 ./check.sh                          # validiere projects/ - siehe unten
 ./merge/merge.sh --key "Projekt-Nr" # Schritt 1: merge/input/*.csv -> merged.csv
-./import/import.sh convert                 # Schritt 2: merged.csv -> projects/ (noch nicht gebaut)
+./import/import.sh convert                 # Schritt 2: merged.csv -> projects/
 ./snapshot.sh                       # projects/ -> out/tables/*.jsonl
 ./report.sh                         # Snapshot + Modell + alle fünf Formate -> out/reports/<Datum>/
 ./report.sh --lang en               # gleich, aber mit englischen Bezeichnungen
@@ -73,7 +73,7 @@ _meta:
   reviewed_by: s.bauer
 ```
 
-Die Roh-Coverage und die bestätkte Coverage werden überall getrennt berichtet (SPEC §11), damit das sichtbar ist.
+Die Roh-Coverage und die bestätigte Coverage werden überall getrennt berichtet (SPEC §11), damit das sichtbar ist.
 
 ### 3. Datenfeld hinzufügen oder ändern
 
@@ -87,7 +87,7 @@ Das Hinzufügen oder Ändern von Feldern geschieht in einer einzigen Datei:
     x-column: true            # erscheint im Bericht und in der Excel-Tabelle
 ```
 
-Anschließend `./check.sh --check-schema` ausführen. Das ist die ganze Änderung – Validierung, Referenzintegrität, Coverage, Parquet-Schema, Reportmodell und Excel-Tabelle folgen daraus. Kein Python.
+Anschließend `./check.sh --check-schema` ausführen. Das ist die ganze Änderung – Validierung, Referenzintegrität, Coverage, die Tabellen, das Reportmodell und die Excel-Tabelle folgen daraus. Kein Python.
 
 ### 4. Projektdaten importieren
 
