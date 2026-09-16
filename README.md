@@ -583,6 +583,17 @@ the form encodes most of them (coded fields are dropdowns, versions and
 counts are typed correctly), but not the judgement calls, like when a value
 actually counts as `verified` rather than merely edited.
 
+**"Bericht erzeugen / Generate report"** runs the same pipeline `./report.sh`
+does — snapshot, model, all five formats — for today's date, so the person
+this tool is for can produce a report without ever touching the CLI. It runs
+in the editor's own container rather than starting new ones (there is no
+podman/docker socket handed into it, on purpose), so it can take a while;
+the page waits for it. `./edit.sh` also starts `./serve.sh` alongside itself
+if it is not already running, on the same `--bind`, so there is somewhere to
+open the result from — the button's own success message links straight to
+it. `./edit.sh --stop` stops only the editor; the report server is left
+running since other people may be looking at reports through it.
+
 **No authentication**, matching `./serve.sh`'s existing no-auth, trusted-network
 precedent, and `--bind 0.0.0.0` by default like `./serve.sh` too: remote
 reachability is essential (the person this is for is not on the host running

@@ -15,6 +15,14 @@
 # the CLI or git at all - not as a replacement for hand-editing YAML and
 # submitting a merge request, which stays the default path for everyone else.
 #
+# **Also starts the report server (./serve.sh) if it is not already running,
+# on the same --bind.** The editor has a "generate report" button (it runs
+# the same pipeline ./report.sh does, in-process - see
+# tools/editor/reportgen.py for why), and a person who cannot use the CLI has
+# no other way to look at what it produced. `./edit.sh --stop` stops only the
+# editor - the report server is left running, since other people may be
+# looking at reports through it; stop it separately with ./serve.sh --stop.
+#
 # **Binds to 0.0.0.0 by default, same as ./serve.sh - decided in SPEC 12.9.**
 # Remote reachability is essential (the person this is for is not on the host
 # running the container) and no authentication was explicitly accepted as the
@@ -38,6 +46,24 @@ print_urls() {
     serve_urls "$port" | while IFS="$(printf '\t')" read -r url what; do
         printf '  %-34s %s\n' "$url" "$what"
     done
+}
+
+# Make sure the report server is up alongside the editor, starting it if it
+# is not already running. Shells out to ./serve.sh itself rather than
+# reimplementing any part of it - container knowledge stays in scripts/lib.sh
+# and nowhere else. Prints the port it ended up on, or nothing if it could
+# not be started (a warning goes to stderr; the editor still works either
+# way, the "generate report" button just has nothing to link to).
+ensure_report_server() {
+    mkdir -p "$REPO_ROOT/out/reports"  # serve.sh refuses a missing directory
+    if ! container_running "$SERVE_CONTAINER"; then
+        "$REPO_ROOT/serve.sh" --detach --bind "$BIND" >/dev/null \
+            || printf 'warning: could not start the report server (./serve.sh) alongside the editor\n' >&2
+    fi
+    if container_running "$SERVE_CONTAINER"; then
+        # shellcheck disable=SC2119  # bare call is intentional, see lib.sh
+        serve_running_port
+    fi
 }
 
 PORT="$EDIT_PORT"
@@ -66,6 +92,9 @@ case "$ACTION" in
         else
             printf '%s is not running\n' "$EDIT_CONTAINER"
         fi
+        if container_running "$SERVE_CONTAINER"; then
+            printf 'the report server (./serve.sh) is still running - stop it separately with ./serve.sh --stop if you no longer need it\n'
+        fi
         exit 0
         ;;
     status)
@@ -73,6 +102,13 @@ case "$ACTION" in
             running_port="$(serve_running_port "$EDIT_CONTAINER" "$EDIT_PORT")"
             printf 'editor running on port %s\n' "$running_port"
             print_urls "$running_port"
+            if container_running "$SERVE_CONTAINER"; then
+                # shellcheck disable=SC2119
+                printf '\nreport server running on port %s (./serve.sh --status for its URLs)\n' \
+                    "$(serve_running_port)"
+            else
+                printf '\nreport server (./serve.sh) is not running\n'
+            fi
             exit 0
         fi
         printf 'not running. Start it with ./edit.sh\n'
@@ -95,10 +131,23 @@ else
     [ "$PORT" != "$WANTED" ] && printf 'port %s is in use, using %s instead\n' "$WANTED" "$PORT"
 fi
 
+# Started before the banner below so its port is known in time to print it,
+# and before the editor's own container so a report can be viewed the moment
+# the "generate report" button is used, not after some second manual step.
+REPORT_PORT="$(ensure_report_server || true)"
+
 printf 'serving the project editor (read-write over projects/) on port %s, bound to %s\n' \
     "$PORT" "$BIND"
 printf 'no authentication - anyone who can reach this port can edit project data\n'
 print_urls "$PORT"
+if [ -n "$REPORT_PORT" ]; then
+    printf '\nreport server (./serve.sh) running on port %s - reports generated from the\n' \
+        "$REPORT_PORT"
+    printf 'editor'"'"'s "generate report" button will be linked from there\n'
+else
+    printf '\nreport server (./serve.sh) could not be started - "generate report" will still\n'
+    printf 'work, there is just nothing to link the result to\n'
+fi
 if [ "$DETACH" = 1 ]; then
     printf '\nstop with ./edit.sh --stop\n'
 else
@@ -112,11 +161,14 @@ ARGS=(--rw --name "$EDIT_CONTAINER"
       --publish "${BIND}:${PORT}:${PORT}")
 [ "$DETACH" = 1 ] && ARGS+=(--detach)
 
+PYARGS=(--port "$PORT" --bind 0.0.0.0)
+[ -n "$REPORT_PORT" ] && PYARGS+=(--serve-port "$REPORT_PORT")
+
 if [ "$DETACH" = 1 ]; then
     run_in_container "${ARGS[@]}" \
-        -- python3 tools/editor/app.py --port "$PORT" --bind 0.0.0.0 \
+        -- python3 tools/editor/app.py "${PYARGS[@]}" \
         >/dev/null
 else
     run_in_container "${ARGS[@]}" \
-        -- python3 tools/editor/app.py --port "$PORT" --bind 0.0.0.0
+        -- python3 tools/editor/app.py "${PYARGS[@]}"
 fi

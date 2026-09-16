@@ -159,14 +159,14 @@ def running_server(tmp_path):
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
-        yield httpd, projects_dir
+        yield httpd, projects_dir, app
     finally:
         httpd.shutdown()
         thread.join(timeout=5)
 
 
 def test_create_edit_save_round_trip(running_server):
-    httpd, projects_dir = running_server
+    httpd, projects_dir, _app = running_server
     base = f"http://127.0.0.1:{httpd.server_address[1]}"
 
     body = urlencode({"name": "Kundenportal Test"}).encode()
@@ -199,7 +199,7 @@ def test_create_writes_exactly_one_file(running_server):
     """No git call, no write anywhere else - creating a project touches
     exactly the one YAML file it creates (SPEC: this tool only writes local
     YAML; nothing here ever calls git)."""
-    httpd, projects_dir = running_server
+    httpd, projects_dir, _app = running_server
     base = f"http://127.0.0.1:{httpd.server_address[1]}"
 
     body = urlencode({"name": "Isolation Test"}).encode()
@@ -207,3 +207,94 @@ def test_create_writes_exactly_one_file(running_server):
         pass
 
     assert [p.name for p in projects_dir.iterdir()] == ["isolation-test.yaml"]
+
+
+# --------------------------------------------------------------------------
+# "Generate report" route. reportgen.generate() itself is exercised for real
+# (it just sequences the same tools ./report.sh does - see reportgen.py);
+# what is worth testing at the HTTP layer is the wiring around it: the route
+# calls it, shows success or failure, links to the report server when it
+# knows about one, and refuses a second run while one is in flight. All
+# three monkeypatch reportgen.generate so none of them pay for a real PDF/
+# deck render, and none of them touch out/reports/<today> - the real thing
+# ./report.sh (or a real click of the button) would write to.
+# --------------------------------------------------------------------------
+
+def test_generate_report_links_to_serve_on_success(running_server, monkeypatch):
+    httpd, _projects_dir, app = running_server
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    app.Handler.ctx.serve_port = 9000
+    monkeypatch.setattr(app.reportgen, "generate", lambda *a, **k: app.reportgen.Result(
+        date="2026-01-01", ok=True, report_dir="out/reports/2026-01-01"))
+
+    req = urllib.request.Request(f"{base}/reports/generate", data=b"", method="POST")
+    with urllib.request.urlopen(req) as resp:
+        page = resp.read().decode()
+
+    assert "Bericht erzeugt" in page
+    assert "http://127.0.0.1:9000/2026-01-01/" in page
+
+
+def test_generate_report_shows_failing_step_output(running_server, monkeypatch):
+    httpd, _projects_dir, app = running_server
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    monkeypatch.setattr(app.reportgen, "generate", lambda *a, **k: app.reportgen.Result(
+        date="2026-01-01", ok=False, report_dir="",
+        steps=[app.reportgen.Step("build_model", False, "boom: schema missing")]))
+
+    req = urllib.request.Request(f"{base}/reports/generate", data=b"", method="POST")
+    with urllib.request.urlopen(req) as resp:
+        page = resp.read().decode()
+
+    assert "fehlgeschlagen" in page
+    assert "build_model" in page
+    assert "boom: schema missing" in page
+
+
+def test_generate_report_refuses_a_second_run_while_one_is_in_flight(running_server):
+    httpd, _projects_dir, app = running_server
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    app.Handler.ctx.report_lock.acquire()
+    try:
+        req = urllib.request.Request(f"{base}/reports/generate", data=b"", method="POST")
+        with urllib.request.urlopen(req) as resp:
+            page = resp.read().decode()
+        assert "already being generated" in page
+    finally:
+        app.Handler.ctx.report_lock.release()
+
+
+# --------------------------------------------------------------------------
+# reportgen.generate() itself: real snapshot/build_model/renderer flags, but
+# with _load faked out so the assertion is about sequencing - stop at the
+# first failing step, report every step that actually ran - not about
+# whether Typst or python-pptx work (verify.sh's full-pipeline step already
+# proves that, through report.sh).
+# --------------------------------------------------------------------------
+
+def test_reportgen_stops_at_the_first_failing_step(monkeypatch, tmp_path):
+    import reportgen
+
+    ran = []
+
+    def fake_load(name, _path):
+        def main(_argv, _name=name):
+            ran.append(_name)
+            return 0 if _name != "build_model" else 2
+        return type("FakeModule", (), {"main": staticmethod(main)})
+
+    monkeypatch.setattr(reportgen, "_load", fake_load)
+    date = "reportgen-unit-test"
+    report_dir = reportgen.REPO_ROOT / "out" / "reports" / date
+    try:
+        result = reportgen.generate(tmp_path, SCHEMA_DIR, date)
+    finally:
+        if report_dir.is_dir():
+            import shutil
+            shutil.rmtree(report_dir)
+
+    assert ran == ["snapshot", "build_model"]  # never reached the renderers
+    assert result.ok is False
+    assert [s.name for s in result.steps] == ["snapshot", "build_model"]
+    assert result.steps[0].ok is True
+    assert result.steps[1].ok is False

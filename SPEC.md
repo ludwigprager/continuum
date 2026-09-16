@@ -535,8 +535,11 @@ tools/build_model.py  [--snapshot out/tables/] [--spec reports/daily.yaml] [--sc
                       [--generated-at ISO]
 tools/render/*.py     --model MODEL.json --out DIR [--lang de|en]
 tools/editor/app.py   [--projects DIR] [--schema DIR] [--port N] [--bind ADDR]
+                      [--serve-port N]
                       # §6.6, M7. Serves the form; writes YAML only, never
-                      # git; exits 0 on normal shutdown (Ctrl-C).
+                      # git; exits 0 on normal shutdown (Ctrl-C). --serve-port
+                      # names the report server's port, set by edit.sh, so the
+                      # "generate report" button can link to its result.
 ```
 
 Exit codes: `0` ok, `1` validation errors (invalid data), `2` tool/usage error.
@@ -951,6 +954,26 @@ not replace it.
   (the person it's for is not on the host running the container), and no
   authentication was explicitly accepted as the cost of that. `--bind
   127.0.0.1` is there for a run where the trust boundary needs tightening.
+- **A "generate report" button, and `./edit.sh` starts `./serve.sh` alongside
+  itself.** The consultant this tool is for has no other way to run
+  `./report.sh` or look at what it produces, so the form needs both: a way to
+  trigger the pipeline and a place to open the result. `edit.sh` starts the
+  report server if it is not already running, on its own `--bind`, and passes
+  its port to `app.py` (`--serve-port`) so the button's result can link
+  straight to it (§5.3, §6.5).
+
+  The button itself runs `tools/snapshot.py`, `tools/build_model.py` and the
+  five renderers **in-process**, via `tools/editor/reportgen.py`, rather than
+  through `run_in_container` the way `report.sh` does: the editor's own
+  container has no podman/docker socket mounted into it, on purpose, so it
+  cannot start sibling containers the way the host-side entry points do - and
+  it does not need to, since it already **is** a pipeline container
+  (`docker/Dockerfile.pipeline`, same as `report.sh` uses) with every renderer
+  dependency already installed. This is a convenience preview, not a
+  replacement for the daily `./report.sh` run: it is missing the image digest
+  `report.sh` resolves on the host before entering the container (SPEC 5.2's
+  `provenance.image_digest`), because that also needs the engine binary the
+  editor's container does not have.
 
 ## 7. Counting rules — settle this before writing SQL
 

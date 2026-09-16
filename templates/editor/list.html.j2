@@ -2,7 +2,35 @@
 {% block title %}Projekte{% endblock %}
 {% block content %}
 <h1>Projekte / Projects</h1>
-<p class="toolbar"><a class="button" href="/projects/new">+ Neues Projekt / New project</a></p>
+
+{% if report_result %}
+  {% if report_result.date %}
+    <p class="finding {{ 'saved' if report_result.ok else 'error' }}">
+      {% if report_result.ok %}
+        Bericht erzeugt / Report generated: <code>{{ report_result.report_dir }}</code>
+        {% if serve_base %} - <a href="{{ serve_base }}{{ report_result.date }}/">ansehen / view</a>{% endif %}
+      {% else %}
+        Bericht fehlgeschlagen / Report generation failed
+        {% for s in report_result.steps if not s.ok %} at step <code>{{ s.name }}</code>{% endfor %}.
+        Siehe unten / see below.
+      {% endif %}
+    </p>
+    {% if not report_result.ok %}
+    <pre>{% for s in report_result.steps if not s.ok %}{{ s.output }}{% endfor %}</pre>
+    {% endif %}
+  {% else %}
+    <p class="finding warning">{% for s in report_result.steps %}{{ s.output }}{% endfor %}</p>
+  {% endif %}
+{% endif %}
+
+<p class="toolbar">
+  <a class="button" href="/projects/new">+ Neues Projekt / New project</a>
+  <form method="post" action="/reports/generate" style="display:inline">
+    <button type="submit">Bericht erzeugen / Generate report</button>
+  </form>
+  {% if serve_base %}<a class="button" href="{{ serve_base }}" target="_blank" rel="noopener">Berichte ansehen / View reports</a>{% endif %}
+</p>
+<p class="hint">Bericht erzeugen kann eine Weile dauern (PDF, Deck). / Generating a report can take a while (PDF, deck).</p>
 <table>
 <tr><th>id</th><th>Name</th><th>Team</th><th>Migration status</th></tr>
 {% for p in projects %}

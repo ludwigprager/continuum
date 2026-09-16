@@ -26,6 +26,7 @@ Exit codes: 0 normal shutdown (Ctrl-C), 2 tool/usage error.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import html
 import re
 import sys
@@ -44,6 +45,7 @@ for p in (TOOLS_DIR, EDITOR_DIR):
 import validate  # noqa: E402
 import formgen  # noqa: E402
 import store  # noqa: E402
+import reportgen  # noqa: E402
 
 try:
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -65,11 +67,20 @@ class Context:
     tool is low-traffic enough that re-parsing a few small YAML files on
     every request is not worth a cache-invalidation story."""
 
-    def __init__(self, projects_dir: Path, schema_dir: Path, template_dir: Path):
+    def __init__(self, projects_dir: Path, schema_dir: Path, template_dir: Path,
+                 serve_port: int | None = None):
         self.projects_dir = projects_dir
         self.schema_dir = schema_dir
         self.env = make_env(template_dir)
         self.lock = threading.Lock()  # one write at a time; single-user tool
+        # A second lock: report generation can take tens of seconds (Typst,
+        # the deck) and must not block project saves for that long, but two
+        # of them at once would race on the same out/reports/<date>/ files.
+        self.report_lock = threading.Lock()
+        # The port ./edit.sh started (or found already running) the report
+        # server on - see edit.sh. None if it could not be started; the
+        # button still works, there is just nothing to link the result to.
+        self.serve_port = serve_port
 
     def sections(self) -> list:
         root, taxonomy, references, _ = validate.load_schema_dir(self.schema_dir)
@@ -88,6 +99,7 @@ ROUTES: list[tuple[str, str, str]] = [
     ("POST", r"^/projects$", "create_project"),
     ("GET", r"^/projects/(?P<pid>[a-z0-9][a-z0-9-]*)/edit$", "edit_form"),
     ("POST", r"^/projects/(?P<pid>[a-z0-9][a-z0-9-]*)/edit$", "save_project"),
+    ("POST", r"^/reports/generate$", "generate_report"),
 ]
 COMPILED_ROUTES = [(m, re.compile(p), h) for m, p, h in ROUTES]
 
@@ -134,6 +146,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def serve_base(self) -> str | None:
+        """Base URL of the report server (./serve.sh), on whatever host the
+        browser used to reach this editor - not a guessed LAN address (see
+        scripts/lib.sh serve_urls, which prints several because there is no
+        single right one). None if edit.sh could not start a report server."""
+        if not self.ctx.serve_port:
+            return None
+        host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
+        return f"http://{host}:{self.ctx.serve_port}/"
+
     def redirect(self, location: str):
         self.send_response(303)
         self.send_header("Location", location)
@@ -147,8 +169,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routes -----------------------------------------------------------
 
-    def list_projects(self):
-        self.render("list.html.j2", projects=store.list_projects(self.ctx.projects_dir))
+    def list_projects(self, report_result=None):
+        self.render("list.html.j2", projects=store.list_projects(self.ctx.projects_dir),
+                    serve_base=self.serve_base(), report_result=report_result)
 
     def new_project_form(self):
         self.render("new.html.j2")
@@ -189,10 +212,34 @@ class Handler(BaseHTTPRequestHandler):
             store.save(self.ctx.projects_dir, pid, doc)
         self._render_edit(pid, doc, saved=True)
 
+    def generate_report(self):
+        """Runs the same pipeline ./report.sh does - snapshot, model, all
+        five renderers - for today's date, so a consultant working only
+        through this form can produce a report without ever touching the
+        CLI (SPEC 6.6's own reason for this tool existing). See
+        reportgen.py for why this runs in-process instead of shelling out
+        to containers the way report.sh does.
+
+        Synchronous: this can take tens of seconds (Typst, the deck), which
+        is a known cost for a low-traffic, single-user tool (see Context),
+        not something worth a job queue for."""
+        if not self.ctx.report_lock.acquire(blocking=False):
+            self.list_projects(report_result=reportgen.Result(
+                date="", ok=False, report_dir="",
+                steps=[reportgen.Step("busy", False,
+                                      "a report is already being generated - try again shortly")]))
+            return
+        try:
+            date = dt.date.today().isoformat()
+            result = reportgen.generate(self.ctx.projects_dir, self.ctx.schema_dir, date)
+        finally:
+            self.ctx.report_lock.release()
+        self.list_projects(report_result=result)
+
 
 def serve(projects_dir: Path, schema_dir: Path, template_dir: Path,
-          host: str, port: int) -> int:
-    Handler.ctx = Context(projects_dir, schema_dir, template_dir)
+          host: str, port: int, serve_port: int | None) -> int:
+    Handler.ctx = Context(projects_dir, schema_dir, template_dir, serve_port)
     httpd = ThreadingHTTPServer((host, port), Handler)
     print(f"editor listening on http://{host}:{port}/  (Ctrl-C to stop)", file=sys.stderr)
     try:
@@ -211,6 +258,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--templates", type=Path, default=DEFAULT_TEMPLATE_DIR)
     parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--bind", default="127.0.0.1")
+    parser.add_argument("--serve-port", type=int, default=None,
+                        help="port ./edit.sh started the report server (./serve.sh) "
+                             "on, so the 'generate report' button can link to its "
+                             "result. Omit if there is none to link to.")
     args = parser.parse_args(argv)
 
     if not args.schema.exists():
@@ -220,7 +271,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"edit: --templates {args.templates} does not exist", file=sys.stderr)
         return EXIT_TOOL
     args.projects.mkdir(parents=True, exist_ok=True)
-    return serve(args.projects, args.schema, args.templates, args.bind, args.port)
+    return serve(args.projects, args.schema, args.templates, args.bind, args.port,
+                 args.serve_port)
 
 
 if __name__ == "__main__":
