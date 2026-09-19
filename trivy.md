@@ -18,6 +18,10 @@ not a `DOCKER_HOST` compatibility trick — so nothing has to be exported to a
 tarball first and nothing has to be installed on the host. See
 [Podman support in Trivy's container-image target docs](https://trivy.dev/docs/dev/guide/target/container_image/).
 
+**What the results mean** — which packages carry the findings, which step
+needs which of them, and what can be removed — is in
+[`image-cves.md`](image-cves.md). This file is only how to run the scan.
+
 **`tools/trivy-scan.sh` packages everything below into one command:**
 
 ```bash
