@@ -6,11 +6,14 @@ directly from disk — `file:///path/to/docs/diagrams/pipeline-architecture.html
 in any browser, no server and no network, which is what makes them safe to
 carry into the air-gapped DC.
 
-`index.html` is a landing page linking all six files (English + German). With
-GitHub Pages enabled for this repo (Settings → Pages → branch `master`,
-folder `/docs`), it serves at `https://ludwigprager.github.io/continuum/diagrams/`
-— a single URL for anyone outside the air gap, e.g. a manager, to open in a
-browser.
+`index.html` is a landing page linking all six files (English + German).
+Published via GitHub Pages (Settings → Pages → branch `master`, folder
+`/docs`) at:
+
+https://ludwigprager.github.io/continuum/diagrams/
+
+That's the one URL to send anyone outside the air gap, e.g. a manager — no
+git, no clone, just a browser.
 
 Each diagram exists in English and German (`*.de.html`), per SPEC §1: source
 data is German, output labels support German and English. The diagram
