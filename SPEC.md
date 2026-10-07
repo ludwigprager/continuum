@@ -1018,25 +1018,43 @@ first months when it will be embarrassing and therefore useful.
 
 Two, both built outside the air gap and carried in.
 
-**`Dockerfile.pipeline`** — `python:3.12-slim-bookworm` base.
+**`Dockerfile.pipeline`** — Wolfi base (`cgr.dev/chainguard/wolfi-base`,
+pinned by digest).
 - pip, pinned exactly, installed at build time: `ruamel.yaml jsonschema duckdb
   pytest`, plus `openpyxl python-pptx matplotlib jinja2` as M3-M5 need them.
   **Not PyYAML** — `ruamel.yaml` is the only YAML library, so there is one
   parser with one set of behaviours rather than two that disagree about
-  duplicate keys.
-- `shellcheck` (apt): the entry points are shell and juniors maintain them.
+  duplicate keys. pip itself is removed again in the same step.
+- `shellcheck`: the entry points are shell and juniors maintain them. Wolfi
+  does not package it, so the upstream static binary is downloaded in the
+  builder stage beside Typst, pinned by version and sha256.
 - Typst: download the release tarball in a builder stage from
   `github.com/typst/typst/releases`, copy the single binary into the final image.
   Pin the version and record it. Check what is current; do not assume.
-- Fonts: `fonts-dejavu fonts-liberation`. Add the corporate font when supplied.
-- Locale `de_DE.UTF-8` and `TZ=Europe/Berlin`. Install `locales`, generate, set
-  `LANG`. Without this, German month names and number formatting are wrong.
+- Fonts: `ttf-dejavu font-liberation`. Add the corporate font when supplied.
+- Locale `de_DE.UTF-8` and `TZ=Europe/Berlin`: `glibc-<ver>-locale-de` ships
+  the locale precompiled, matching the base's glibc. Without this, German
+  month names and number formatting are wrong.
+- Every `apk` package pinned to an exact version, never `apk upgrade`. Wolfi
+  is a rolling distribution; its repository keeps old versions, which is what
+  makes the pins hold.
 - Non-root user, `WORKDIR /work`.
 
 **`Dockerfile.import`** — same base, only `pyyaml`. Kept separate because the
 import runs rarely and does not need the renderer stack. `csv` is in the
 standard library, and with the xlsx path gone (§3) `openpyxl` is gone with it:
 one fewer dependency to pin, bundle and checksum for M6.
+
+**Revised (0.6.0): the base was `python:3.12-slim-bookworm`.** Every scanner
+finding on both bookworm images — 339 each, 5 CRITICAL — sat in Debian
+base-layer packages this project never uses (`perl-base`, which is Essential
+in Debian and cannot be removed, `libsqlite3-0`, `zlib1g`, util-linux,
+ncurses, ...), and none had a fix in the distribution. On Wolfi the same
+pipeline scans clean with 39 OS packages instead of 112, and `./verify.sh`
+passes unchanged. The move also ended an exact apt pin that had stopped
+building: Debian drops superseded versions from its repository, so
+`libpcre2-8-0=10.42-1+deb12u1` vanished and the bookworm Dockerfiles could no
+longer be built from scratch.
 
 ### 8.2 Air-gap traps
 

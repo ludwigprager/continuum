@@ -19,10 +19,10 @@
 #                                            # extra flags, passed to `trivy image`
 #                                            # (--gate is shorthand for exactly this)
 #
-# --gate exists because "any CRITICAL CVE" is not a gate that can ever pass: a
-# base Debian image reliably carries a handful with no fix published yet (this
-# repo's own continuum-pipeline image currently does - libsqlite3-0, perl-base,
-# zlib1g, all upstream-unfixed, nothing a Dockerfile change here can act on).
+# --gate exists because "any CRITICAL CVE" is not always a gate that can pass:
+# a base distribution can carry findings with no fix published yet (this
+# repo's images did on Debian bookworm - libsqlite3-0, perl-base, zlib1g, all
+# upstream-unfixed - until 0.6.0 moved them to Wolfi, see SPEC 8.1).
 # --ignore-unfixed is what makes the gate about vulnerabilities that can
 # actually be remediated by rebuilding, rather than blocking forever on ones
 # that can't. --gate and a trailing `-- ...` are mutually exclusive - pick one.
@@ -87,33 +87,23 @@ fi
 
 mkdir -p out/scans
 
-# A json result can read back with the OS/language target identified but
-# `"Vulnerabilities": null` on it - not an empty list, null - immediately
-# after the `podman run` that wrote it exits with status 0. This is not
-# Trivy getting it wrong: Trivy's own log (saved to $log below) shows it
-# genuinely found and scanned the packages every time this has been seen
-# ("pkg_num=112", "[python-pkg] Detecting vulnerabilities..."), and re-reading
-# the exact same file later, from a separate process, with nothing re-run,
-# shows it fully populated - sometimes seconds later, sometimes not within
-# a script-internal retry loop that kept re-reading for over a minute. This
-# looks like a read-after-write race on the host side specific to this
-# sandboxed environment (`--output` writes through the `:z` bind mount from
-# inside the container, and rootless Podman's storage - fuse-overlayfs here -
-# does not guarantee that write is visible to every reader the instant
-# `podman run` returns), not a scan defect, so the check below cross-checks
-# the log rather than just failing: if Trivy's own log says it found and
-# scanned real packages for a target that still reads back null, that is
-# reported as a warning to double-check by hand, not as a failed scan -
-# calling it a failure has been wrong every time this was tested. --format
-# table has no structure to check this way, so it is not validated.
+# A json result is checked for being a complete Trivy report: it parses, and
+# it carries a Results list. That is what a file cut off mid-write fails.
+#
+# It used to be checked for targets whose `Vulnerabilities` field read back
+# null, on the theory that this was a read-after-write race on the bind mount.
+# It was not: Trivy *omits* `Vulnerabilities` for a target with no findings,
+# and in jq a missing key reads as null - so every clean target tripped it,
+# including the Python target in every scan of these images. A clean scan
+# and a broken one looked identical to that check; they do not to this one.
+# --format table has no structure to check, so it is not validated.
 looks_incomplete() {
     local file="$1"
     command -v jq >/dev/null 2>&1 || {
         echo "tools/trivy-scan.sh: jq not found, cannot validate $file - trusting it" >&2
         return 1
     }
-    jq -e '[.Results[]? | select((.Class == "os-pkgs" or .Class == "lang-pkgs") and .Vulnerabilities == null)] | length > 0' \
-        "$file" >/dev/null 2>&1
+    ! jq -e '.Results | type == "array"' "$file" >/dev/null 2>&1
 }
 
 # True if Trivy's own log shows it actually found and scanned packages,
@@ -157,23 +147,14 @@ for image in "${IMAGES[@]}"; do
         echo "tools/trivy-scan.sh: gate OK for $ref - no fixable HIGH/CRITICAL vulnerabilities" >&2
     fi
     if [ "$FORMAT" = "json" ]; then
-        settled=0
-        for wait in 0 1 2 4 8 16; do
-            [ "$wait" -eq 0 ] || sleep "$wait"
-            looks_incomplete "$dest" || { settled=1; break; }
-        done
-        if [ "$settled" -ne 1 ]; then
-            if log_shows_real_scan "$log"; then
-                echo "tools/trivy-scan.sh: WARNING: $dest still reads back a null Vulnerabilities field, but $log shows Trivy actually scanned real packages - this looks like the read-after-write race documented in trivy.md, not a failed scan. Re-check by hand: jq '.Results[].Vulnerabilities' $dest" >&2
-            else
-                echo "tools/trivy-scan.sh: $dest has a null Vulnerabilities field and $log shows no evidence Trivy scanned real packages - treating as a failed scan" >&2
-                rc=1
-            fi
+        if looks_incomplete "$dest"; then
+            echo "tools/trivy-scan.sh: $dest is not a complete Trivy report (no Results list) - treating as a failed scan, see $log" >&2
+            rc=1
+            continue
         fi
 
         html="out/scans/${image}-${V}.html"
         echo "converting $dest -> $html" >&2
-        html_ok=1
         if ! podman run --rm \
                 -v "$(pwd)/out/scans:/out:z" \
                 "$TRIVY_IMAGE" \
@@ -182,17 +163,8 @@ for image in "${IMAGES[@]}"; do
                 2>>"$log"; then
             echo "tools/trivy-scan.sh: html conversion of $dest failed" >&2
             rc=1
-            html_ok=0
         else
             any_html=1
-        fi
-        if [ "$html_ok" = 1 ] && [ "$settled" -ne 1 ] && log_shows_real_scan "$log"; then
-            # $html was rendered from $dest while $dest still hadn't cleared
-            # the same read-after-write race (warned about above), so it
-            # likely shows the same null Vulnerabilities. Not worth a second
-            # retry loop for a file that is cheap to regenerate once $dest
-            # itself settles.
-            echo "tools/trivy-scan.sh: WARNING: $html was converted from $dest before that race cleared - once \`jq '.Results[].Vulnerabilities' $dest\` shows real data, redo just the conversion: podman run --rm -v \"\$(pwd)/out/scans:/out:z\" $TRIVY_IMAGE convert --format template --template \"@/contrib/html.tpl\" --output \"/out/${image}-${V}.html\" \"/out/${image}-${V}.json\"" >&2
         fi
     fi
 done

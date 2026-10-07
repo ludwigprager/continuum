@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.pipeline
-    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    image: continuum-pipeline:${IMAGE_TAG:-0.6.0}
     # Not paranoia: the cheapest possible regression test for the air-gap
     # traps in SPEC 8.2.
     network_mode: none
@@ -34,7 +34,7 @@ services:
     command: ["python3", "tools/validate.py", "--projects", "projects", "--schema", "schema"]
 
   shell:
-    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    image: continuum-pipeline:${IMAGE_TAG:-0.6.0}
     network_mode: none
     volumes:
       - .:/work:z
@@ -46,7 +46,7 @@ services:
   # Warm container for the pre-commit hook. `docker compose up -d dev`, then
   # USE_WARM_CONTAINER=1. Purely a latency optimisation; nothing requires it.
   dev:
-    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    image: continuum-pipeline:${IMAGE_TAG:-0.6.0}
     container_name: continuum-dev
     network_mode: none
     volumes:
@@ -69,7 +69,7 @@ services:
   # this use needs. See serve.sh, which is the supported entry point.
   serve:
     profiles: [serve]
-    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    image: continuum-pipeline:${IMAGE_TAG:-0.6.0}
     container_name: continuum-serve
     ports:
       - "${SERVE_BIND:-0.0.0.0}:${SERVE_PORT:-8000}:${SERVE_PORT:-8000}"
@@ -92,7 +92,7 @@ services:
   # loopback-only for a given run. It never runs git - see edit.sh's header.
   edit:
     profiles: [edit]
-    image: continuum-pipeline:${IMAGE_TAG:-0.5.0}
+    image: continuum-pipeline:${IMAGE_TAG:-0.6.0}
     container_name: continuum-edit
     ports:
       - "${EDIT_BIND:-0.0.0.0}:${EDIT_PORT:-8001}:${EDIT_PORT:-8001}"

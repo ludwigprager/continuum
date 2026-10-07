@@ -1,42 +1,67 @@
 # Pipeline image. Built outside the air gap, carried in (SPEC 8.1).
 #
-# Stage 1: Typst. The release tarball is downloaded here, verified against a
-# pinned checksum and reduced to the single binary that the final image needs.
-# Downloading at runtime is not an option - inside the air gap there is no
-# network - and building it from source would drag a Rust toolchain into an
-# image that is otherwise 400 MB.
+# Base: Wolfi (wolfi-base), not python:3.12-slim-bookworm. Moved in 0.6.0
+# because every finding on the bookworm image - 339 of them, 5 CRITICAL - sat
+# in Debian base-layer packages this project never touches (perl-base is
+# Essential in Debian and cannot be removed; libsqlite3-0 and zlib1g were
+# unfixed upstream there), and none had a fix in the distribution. The same
+# pipeline on Wolfi scanned clean, 39 OS packages instead of 112, and passed
+# ./verify.sh unchanged.
 #
-# The version is pinned to the patch: Typst shifts layout between releases,
-# which would break the byte-level reproducibility of the PDF (SPEC 9). It was
-# checked, not assumed - 0.15.1 is the current release (2026-07-17).
-FROM python:3.12-slim-bookworm AS typst
+# Wolfi is a rolling distribution, not a release like bookworm, so the base is
+# pinned by digest and every package to an exact version; Wolfi's repository
+# keeps old versions, which is what makes the pins hold. A bump is a
+# deliberate, reviewable one-line change like every other pin in the project
+# (SPEC 9). Never `apk upgrade`: that pulls whatever is newest on the day of
+# the build, which is exactly the drift these pins exist to prevent.
+ARG WOLFI_BASE=cgr.dev/chainguard/wolfi-base@sha256:238642d42c5613936474d00b900c4e65fb6f637d8991c913403ff09a09cf43a3
+
+# Stage 1: upstream static binaries, downloaded, verified against a pinned
+# checksum and reduced to the single file the final image needs. Downloading
+# at runtime is not an option - inside the air gap there is no network.
+#
+# Typst: the version is pinned to the patch, because Typst shifts layout
+# between releases, which would break the byte-level reproducibility of the
+# PDF (SPEC 9). Building it from source would drag a Rust toolchain in.
+#
+# shellcheck: Wolfi does not package it. 0.9.0 is what bookworm shipped, so
+# the scripts are judged by the same rules as before the base moved. Upstream
+# publishes no checksums; these were taken from the release download on
+# 2026-10-07.
+FROM ${WOLFI_BASE} AS binaries
 
 ARG TYPST_VERSION=0.15.1
-# One checksum per architecture, from the release page. A tarball that does not
-# match is a failed build, not a mystery PDF.
 ARG TYPST_SHA256_x86_64=a6d077d0a95eed5a2eba715b2dae06be954f624ccbf85758a03f389ded33118c
 ARG TYPST_SHA256_aarch64=5aa8d74a3d906e60ea12a66ac2f37f8eef1b14cbad7182a745e393a10c23dcee
+ARG SHELLCHECK_VERSION=0.9.0
+ARG SHELLCHECK_SHA256_x86_64=700324c6dd0ebea0117591c6cc9d7350d9c7c5c287acbad7630fa17b1d4d9e2f
+ARG SHELLCHECK_SHA256_aarch64=179c579ef3481317d130adebede74a34dbbc2df961a70916dd4039ebf0735fae
 
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends curl xz-utils ca-certificates; \
+    apk add --no-cache curl xz; \
+    mkdir -p /usr/local/bin; \
     arch="$(uname -m)"; \
     case "$arch" in \
-        x86_64)  sha="$TYPST_SHA256_x86_64" ;; \
-        aarch64) sha="$TYPST_SHA256_aarch64" ;; \
-        *) echo "no pinned Typst checksum for $arch" >&2; exit 1 ;; \
+        x86_64)  tsha="$TYPST_SHA256_x86_64";  ssha="$SHELLCHECK_SHA256_x86_64" ;; \
+        aarch64) tsha="$TYPST_SHA256_aarch64"; ssha="$SHELLCHECK_SHA256_aarch64" ;; \
+        *) echo "no pinned checksums for $arch" >&2; exit 1 ;; \
     esac; \
     target="typst-${arch}-unknown-linux-musl"; \
     curl -fsSL -o /tmp/typst.tar.xz \
         "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/${target}.tar.xz"; \
-    echo "${sha}  /tmp/typst.tar.xz" | sha256sum -c -; \
+    echo "${tsha}  /tmp/typst.tar.xz" | sha256sum -c -; \
     tar -xJf /tmp/typst.tar.xz -C /tmp; \
     install -m 0755 "/tmp/${target}/typst" /usr/local/bin/typst; \
-    typst --version; \
-    rm -rf /tmp/typst.tar.xz "/tmp/${target}" /var/lib/apt/lists/*
+    curl -fsSL -o /tmp/sc.tar.xz \
+        "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.${arch}.tar.xz"; \
+    echo "${ssha}  /tmp/sc.tar.xz" | sha256sum -c -; \
+    tar -xJf /tmp/sc.tar.xz -C /tmp; \
+    install -m 0755 "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck; \
+    /usr/local/bin/typst --version; \
+    /usr/local/bin/shellcheck --version
 
 # Stage 2: the pipeline itself.
-FROM python:3.12-slim-bookworm
+FROM ${WOLFI_BASE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -49,41 +74,35 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TYPST_PACKAGE_CACHE_PATH=/opt/typst/cache
 
 # Locale and timezone must be baked in: without them German month names and
-# number formatting come out wrong, and there is no network at runtime to fix it.
-# shellcheck is here because the entry points are shell and juniors maintain them.
+# number formatting come out wrong, and there is no network at runtime to fix
+# it. glibc-2.44-locale-de ships de_DE precompiled, so there is no locale-gen
+# step; its version must match the glibc-2.44 the base already carries.
 # The fonts are explicit because a missing font does not error, it silently
 # substitutes (SPEC 8.2); charts.py asserts at startup that the one it asks for
-# is the one it got.
-#
-# libpcre2-8-0 is pinned to an exact patched version rather than reached with
-# a blanket `apt-get upgrade`: an upgrade pulls whatever is newest in the repo
-# on the day of the build, which is exactly the kind of drift this project
-# pins against everywhere else (SPEC 9). A version nailed down here is a
-# version this Dockerfile always installs, and a bump is a deliberate,
-# reviewable one-line change like every other pin in the project.
+# is the one it got. bash is for ./shell.sh - the entry points run python3 and
+# shellcheck directly.
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        locales tzdata shellcheck fonts-dejavu fonts-liberation \
-        libpcre2-8-0=10.42-1+deb12u1; \
-    sed -i 's/^# *\(de_DE.UTF-8 UTF-8\)/\1/' /etc/locale.gen; \
-    locale-gen; \
+    apk add --no-cache \
+        python-3.12=3.12.15-r2 \
+        bash=5.3-r13 \
+        tzdata=2026e-r0 \
+        glibc-2.44-locale-de=2.44-r8 \
+        ttf-dejavu=2.37-r9 \
+        font-liberation=2.1.5-r5; \
     ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime; \
     echo "$TZ" > /etc/timezone; \
-    rm -rf /var/lib/apt/lists/*
-
-COPY docker/requirements.pipeline.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+    ln -sf python3.12 /usr/bin/python3
 
 # pip is a build-time tool, not a runtime dependency (SPEC 8.2: "No pip at
-# runtime"), so the image is more minimal - and one whole class of scanner
-# findings narrower - with it gone rather than pinned. `python -m pip
-# uninstall` can remove pip's own files because the module is already loaded
-# in memory by the time it does so; setuptools and wheel are not installed as
-# separate packages here (pip vendors what it needs), so those two are
-# no-ops, kept only so a future base image that does ship them separately
-# does not silently leave them behind.
-RUN python3 -m pip uninstall -y pip setuptools wheel
+# runtime"), so it is installed for this one step and removed again by the
+# package manager that installed it - the image is more minimal, and one whole
+# class of scanner findings narrower, with it gone rather than pinned.
+COPY docker/requirements.pipeline.txt /tmp/requirements.txt
+RUN set -eux; \
+    apk add --no-cache py3.12-pip=26.2.1-r2; \
+    python3 -m pip install --no-cache-dir --root-user-action=ignore -r /tmp/requirements.txt; \
+    rm /tmp/requirements.txt; \
+    apk del --no-cache py3.12-pip
 
 # matplotlib builds its font cache on first use, which is a write to $HOME and,
 # on a cache miss, a reach for the network (SPEC 8.2). Build it here, into the
@@ -104,7 +123,8 @@ RUN set -eux; \
     chmod -R a+rwX "$MPLCONFIGDIR"; chmod 1777 "$MPLCONFIGDIR"; \
     test -n "$(ls -A "$MPLCONFIGDIR")"
 
-# Typst, from the builder stage: one static binary, no runtime dependencies.
+# Typst and shellcheck, from the builder stage: static binaries, no runtime
+# dependencies.
 #
 # SPEC 8.2: Typst fetches `@preview/...` packages from its registry on first
 # use, which inside the air gap is a failed report. templates/report.typ
@@ -114,17 +134,21 @@ RUN set -eux; \
 # that may not even be writable.
 # The `typst fonts` greps are the same assertion charts.py makes at startup: a
 # missing font does not error, it silently substitutes (SPEC 8.2), and the
-# report then looks different inside the air gap than it did outside.
-COPY --from=typst /usr/local/bin/typst /usr/local/bin/typst
+# report then looks different inside the air gap than it did outside. The
+# setlocale call is the same check for the locale: a missing one raises here
+# instead of formatting German numbers wrong at runtime.
+COPY --from=binaries /usr/local/bin/typst /usr/local/bin/shellcheck /usr/local/bin/
 RUN set -eux; \
     mkdir -p "$TYPST_PACKAGE_PATH" "$TYPST_PACKAGE_CACHE_PATH"; \
     chmod -R a+rwX /opt/typst; \
     typst --version; \
     typst fonts | grep -qx "Liberation Sans"; \
     typst fonts | grep -qx "Liberation Mono"; \
-    typst fonts | grep -qx "DejaVu Sans"
+    typst fonts | grep -qx "DejaVu Sans"; \
+    python3 -c "import locale; locale.setlocale(locale.LC_ALL, 'de_DE.UTF-8')"
 
 # uid 1000 so rootless podman's --userns=keep-id maps the host user cleanly.
-RUN groupadd -g 1000 pipeline && useradd -u 1000 -g 1000 -m -s /bin/bash pipeline
+# busybox addgroup/adduser: Wolfi has no useradd without pulling in shadow.
+RUN addgroup -g 1000 pipeline && adduser -D -u 1000 -G pipeline -s /bin/bash pipeline
 USER pipeline
 WORKDIR /work

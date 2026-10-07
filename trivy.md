@@ -147,31 +147,17 @@ vulnerability DB survives between scans instead of redownloading every run.
   entirely (Trivy's default tries all four in order) — worth it since here
   only `podman` will ever succeed, and the failed docker-socket and
   containerd-socket attempts add nothing but noise to the output.
-- **Reading the json result right after `podman run --rm` exits can show
-  `"Vulnerabilities": null`** on the os-pkgs or lang-pkgs target instead of a
-  populated (or even empty) list. This is not Trivy misreporting: Trivy's own
-  log (stderr - redirect it to a file, `tools/trivy-scan.sh` always does)
-  shows it genuinely found and scanned the packages every time this has been
-  seen (`pkg_num=112`, `[python-pkg] Detecting vulnerabilities...`), and
-  re-reading the same file later from a separate process, nothing re-run,
-  always shows it fully populated - sometimes after a couple of seconds,
-  sometimes not inside a retry loop that kept re-reading, from the same
-  process, for over a minute. That shape (a *separate* later read always
-  works; retrying *within one process* is not reliable) looks like a
-  read-after-write visibility race specific to this sandboxed environment
-  (`--output` writes the file from inside the container, through the `:z`
-  bind mount, and rootless Podman's storage - fuse-overlayfs here - does not
-  guarantee that write is visible to every reader the instant `podman run`
-  returns), but it was never nailed down conclusively past that, so do not
-  take this as the final word if you hit it somewhere else. Re-running the
-  whole scan is the wrong response either way: it is slow, and a real defect
-  would look identical, so `tools/trivy-scan.sh` instead cross-checks the log
-  - if it shows Trivy actually scanned real packages, a `null` result is
-  reported as a warning to double-check by hand, not a failure, because
-  calling it a failure has been wrong every time in testing. Reading the
-  commands above by hand, do the same: before trusting a `null`, check the
-  log for `pkg_num=` and re-read the json file from a fresh command a moment
-  later rather than re-scanning.
+- **A target with no `Vulnerabilities` key is clean, not unfinished.** Trivy
+  omits the field when a target has no findings, and in jq a missing key reads
+  as `null`, so `jq '.Results[].Vulnerabilities'` printing `null` means zero
+  findings. An earlier version of this document took that `null` for a
+  read-after-write race on the bind mount and `tools/trivy-scan.sh` warned
+  about it on every scan; the warning fired because the Python target of these
+  images has always been clean, and every target was clean once the images
+  moved to Wolfi (SPEC 8.1). The script now checks only what a broken write
+  actually breaks - the file parses and carries a `Results` list. To count
+  findings, use `[.Results[]?.Vulnerabilities[]?] | length`, which treats a
+  missing key as an empty list.
 
 ## 3. A shell function, if you'll do this often
 
